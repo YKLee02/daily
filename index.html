@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Daily Speaking Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Spectral:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@1.53.0/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js"></script>
+<style>
+/* VOICE: a precise, calm practice instrument; one action at a time
+   IDEA: a voice coach's marked-up script plus a lab readout: phoneme chips and a native-vs-you pitch trace
+   PICTURE: the script with words coloured by Azure scores; the overlaid pitch contours in the line analysis
+   COLOUR and TYPE: white paper, ink, ultramarine for record/native, vermilion for errors, amber for borderline; Spectral for English, Inter for UI
+   LAYOUT: script left, record + score right; line analysis, coach, history below; sticky record bar under 900px */
+:root{color-scheme:light dark;
+--bg:light-dark(#ffffff,#0d0e18);--ink:light-dark(#14110f,#ecebf5);--mute:light-dark(#5b5f6e,#a2a5b9);
+--line:light-dark(#e2e4eb,#272b42);--card:light-dark(#ffffff,#131525);
+--blue:light-dark(#1d2bd8,#8d95ff);--on-blue:light-dark(#ffffff,#0d0e18);--blue-soft:light-dark(#eef0ff,#1b1f46);
+--top:light-dark(#1d2bd8,#141957);--red:light-dark(#c8341a,#ff8d70);--red-soft:light-dark(#fdece7,#3a1c16);
+--amber:light-dark(#a35c00,#f2b35c);--amber-soft:light-dark(#fff3df,#33260f);
+--serif:"Spectral",Georgia,serif;--sans:"Inter","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--sans);overflow-x:clip}
+.band{padding:clamp(24px,4vw,56px) max(5vw,16px)}
+.in{max-width:1240px;margin-inline:auto}
+h1,h2,h3{margin:0;font-weight:600;text-wrap:balance}h2{font-size:24px;line-height:1.2}h3{font-size:16px}
+p{margin:0}button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:999px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--blue)}.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.solid{background:var(--blue);color:var(--on-blue);border-color:var(--blue)}
+.btn svg,.ib svg{width:18px;height:18px}
+select,input[type=text],input[type=url],input[type=password]{min-height:44px;font-size:16px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);width:100%}
+.note{color:var(--mute);font-size:14px}.err{color:var(--red)}
+.top{background:var(--top);color:#fff;padding-block:clamp(22px,3vw,40px)}
+.top .in{display:flex;flex-wrap:wrap;gap:20px 40px;align-items:flex-end;justify-content:space-between}
+.top h1{font:600 clamp(34px,5vw,48px)/1.05 var(--serif)}
+.kicker{font-size:15px;opacity:.85;margin-bottom:6px}.tag{margin-top:8px;opacity:.85}
+.stats{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-end}
+.stat{display:flex;flex-direction:column}.stat b{font:600 32px/1.1 var(--serif)}.stat span{font-size:13px;opacity:.85}
+.top .btn{background:transparent;color:#fff;border-color:rgba(255,255,255,.55)}
+.main .in{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);grid-template-areas:"script rec" "script score";grid-template-rows:auto 1fr;gap:24px 40px;align-items:start}
+.script{grid-area:script;position:relative}.rec{grid-area:rec}.score{grid-area:score}
+.topic{color:var(--blue);font-weight:600;font-size:14px}
+.script h2{font:500 clamp(28px,3.4vw,40px)/1.1 var(--serif);margin:4px 0 6px}
+.scene{color:var(--mute)}
+.acts{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
+.rate{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--mute)}.rate select{width:auto}
+.change{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin-top:14px;padding:14px;border:1px dashed var(--line);border-radius:14px}
+.change input,.change .note{grid-column:1/-1}
+.legend{margin:22px 0 4px;font-size:14px;color:var(--mute)}
+.lines{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.line{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:12px;align-items:start;padding:14px 8px;border-bottom:1px solid var(--line);border-radius:10px;cursor:pointer}
+.line.playing{background:var(--blue-soft)}.line.cur{box-shadow:inset 4px 0 0 var(--red);background:var(--red-soft)}.line.sel{box-shadow:inset 4px 0 0 var(--blue)}
+.spk{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;font-weight:700;font-size:14px;border:1.5px solid var(--ink);margin-top:4px}
+.spkB{background:var(--blue);border-color:var(--blue);color:var(--on-blue)}
+.txt{font:400 21px/1.6 var(--serif)}
+.w.st{font-weight:700}.sl{color:var(--blue);margin:0 .05em 0 .25em}
+.tune{color:var(--blue);margin-left:.35em;font-family:var(--sans);font-size:18px}
+.w.mid{color:var(--amber);text-decoration:underline;text-underline-offset:5px;text-decoration-thickness:2px}
+.w.bad{color:var(--red);text-decoration:underline wavy;text-underline-offset:5px;text-decoration-thickness:1.5px}
+.w.omit{color:var(--red);opacity:.6;text-decoration:line-through}
+.lbtn{display:flex;gap:6px;align-items:center}
+.ib{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);cursor:pointer;flex:none}
+.ib:hover{border-color:var(--blue);color:var(--blue)}
+.lsc{font-size:13px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.lsc:empty{display:none}.lsc.hi{background:var(--blue-soft);color:var(--blue)}.lsc.mid{background:var(--amber-soft);color:var(--amber)}.lsc.lo{background:var(--red-soft);color:var(--red)}
+.phr{margin-top:22px}.phr h3{margin-bottom:8px}
+.phr dl{margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.phr div{padding:12px 14px;border:1px solid var(--line);border-radius:12px}
+.phr dt{font:500 18px/1.3 var(--serif)}.phr dd{margin:2px 0 0;color:var(--mute);font-size:14px}
+.stamp{position:absolute;top:0;right:0;transform:rotate(6deg);border:3px solid var(--blue);color:var(--blue);font-weight:700;padding:6px 14px;border-radius:10px;background:var(--card);font-size:15px}
+.rec{background:var(--blue);color:var(--on-blue);border-radius:20px;padding:18px;z-index:5}
+.recrow{display:flex;gap:16px;align-items:center}
+.recbtn{flex:none;display:grid;place-items:center;width:76px;height:76px;border-radius:50%;border:0;background:var(--on-blue);color:var(--blue);cursor:pointer;position:relative}
+.recbtn svg{width:32px;height:32px}.recbtn[disabled]{opacity:.5;cursor:not-allowed}
+.recbtn.live{background:var(--red);color:#fff}
+.recbtn.live::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:3px solid var(--on-blue);animation:pulse 1.4s ease-out infinite}
+@keyframes pulse{from{opacity:.9;transform:scale(1)}to{opacity:0;transform:scale(1.25)}}
+@media (prefers-reduced-motion:reduce){.recbtn.live::after{animation:none}}
+.rec :focus-visible{outline-color:var(--on-blue)}
+.mode{font-weight:700;font-size:17px}.rstate{font-size:14px;opacity:.92}
+.level{height:6px;border-radius:99px;background:rgba(255,255,255,.25);margin-top:12px;overflow:hidden}.level i{display:block;height:100%;width:0;background:var(--on-blue);transition:width .08s}
+.recacts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.recacts .btn{background:transparent;color:var(--on-blue);border-color:var(--on-blue);min-height:40px}
+.score{border:1px solid var(--line);border-radius:20px;padding:20px;background:var(--card)}
+.ringwrap{position:relative;width:190px;max-width:100%;margin:0 auto 8px;aspect-ratio:1}
+.ringwrap svg{width:100%;height:100%;display:block}
+.ringtxt{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.ringtxt b{font:600 clamp(44px,6vw,54px)/1 var(--serif)}.ringtxt span{font-size:13px;color:var(--mute)}
+.metrics{display:grid;gap:9px;margin:10px 0 18px}
+.mrow{display:grid;grid-template-columns:7.2em minmax(0,1fr) 3.4em;gap:10px;align-items:center;font-size:14px}
+.mrow output{text-align:right;font-weight:700;white-space:nowrap}
+.bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--blue);border-radius:99px}
+.tries{list-style:none;margin:8px 0 0;padding:0;font-size:14px;max-height:200px;overflow:auto}
+.tries li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
+.tries .pass{color:var(--blue);font-weight:700}.tries:empty::before{content:"아직 시도가 없어요.";color:var(--mute)}
+.detail{border-top:1px solid var(--line)}
+.dhead{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:baseline;justify-content:space-between}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{min-width:44px;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-weight:700;cursor:pointer}
+.tabs button.on{background:var(--blue);color:var(--on-blue);border-color:var(--blue)}
+.tabs button.lo{color:var(--red)}.tabs button.on.lo{color:var(--on-blue)}
+.dgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:28px 40px;margin-top:20px}
+.subs{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 16px}
+.subs span{font-size:13px;padding:4px 10px;border-radius:99px;background:var(--blue-soft);color:var(--blue);font-weight:600;white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.wchip{display:inline-flex;align-items:baseline;gap:6px;min-height:44px;padding:6px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);cursor:pointer;font:500 18px var(--serif)}
+.wchip small{font:700 12px var(--sans);color:var(--mute)}
+.wchip.mid{border-color:var(--amber);background:var(--amber-soft)}.wchip.mid small{color:var(--amber)}
+.wchip.bad,.wchip.omit{border-color:var(--red);background:var(--red-soft)}.wchip.bad small,.wchip.omit small{color:var(--red)}
+.wchip.ins{border-style:dashed;opacity:.7}.wchip.on{outline:3px solid var(--blue);outline-offset:1px}
+.wchip em{font:600 11px var(--sans);font-style:normal;color:var(--red)}
+.phon{margin-top:16px;padding:14px 16px;border-radius:14px;border:1px solid var(--line)}
+.phon h3{font:600 20px var(--serif);margin-bottom:8px}
+.prow{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.pchip{display:grid;text-align:center;min-width:52px;padding:6px 8px;border-radius:10px;background:var(--blue-soft)}
+.pchip b{font:500 20px var(--serif)}.pchip small{font-size:12px;font-weight:700}
+.pchip.mid{background:var(--amber-soft);color:var(--amber)}.pchip.bad{background:var(--red-soft);color:var(--red)}
+.pchip i{font-size:11px;font-style:normal}
+.tips{margin:0;padding-left:1.1em;display:grid;gap:6px;font-size:15px}
+.flags{margin-top:14px;display:grid;gap:6px;font-size:15px}
+.flags p{padding:8px 12px;border-radius:10px;background:var(--amber-soft)}
+.fig{position:relative;min-height:280px;background:var(--card);border-radius:16px;border:1px solid var(--line)}
+.fig>canvas{position:absolute;inset:0;width:100%;height:100%}
+.empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);padding:20px;text-align:center}
+.key{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--mute);margin:10px 0}
+.key i{display:inline-block;width:18px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.pstats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+.ps{border:1px solid var(--line);border-radius:12px;padding:10px 12px}.ps span{font-size:12px;color:var(--mute)}.ps b{display:block;font:600 22px var(--serif)}
+.pbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.coach .in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:24px 48px}
+.coachout{display:grid;gap:14px}
+.coachout .sum{font-size:17px}
+.coachout .fx{border-left:3px solid var(--blue);padding:4px 0 4px 14px}
+.coachout .fx b{font:700 19px var(--serif)}
+.drill{display:flex;align-items:center;gap:8px;margin-top:6px;font:italic 400 18px var(--serif)}
+.drill .ib{width:36px;height:36px}
+.coachout .next{background:var(--blue-soft);border-radius:12px;padding:12px 14px;font-weight:600}
+.coachout ol{margin:0;padding-left:1.2em;display:grid;gap:6px}
+.hist{border-top:1px solid var(--line)}
+.days{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:6px;margin:16px 0 20px}
+.day{display:grid;grid-template-rows:90px auto auto;gap:4px;text-align:center;font-size:12px;color:var(--mute)}
+.day .col{position:relative;background:var(--line);border-radius:8px;overflow:hidden}
+.day .col i{position:absolute;left:0;right:0;bottom:0;background:var(--mute);opacity:.5}
+.day.pass .col i{background:var(--blue);opacity:1}
+.day b{color:var(--ink);font-size:13px}.day.today span{color:var(--blue);font-weight:700}
+details{border-top:1px solid var(--line);padding-top:14px}
+summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
+details ul{margin:6px 0 0;padding-left:1.2em;display:grid;gap:6px;max-width:75ch}
+dialog{border:0;border-radius:20px;padding:0;max-width:min(560px,94vw);width:100%;background:var(--card);color:var(--ink);box-shadow:0 30px 80px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(10,12,30,.55)}
+.dlg{padding:24px;display:grid;gap:14px}
+.dlg label{display:grid;gap:6px;font-weight:600;font-size:14px}
+.dlg .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.dlg .acts{justify-content:flex-end;margin:0}
+@media(max-width:900px){
+ .main .in{grid-template-columns:minmax(0,1fr);grid-template-areas:"script" "rec" "score"}
+ .rec{position:sticky;bottom:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:12px 14px}
+ .recbtn{width:60px;height:60px}.recbtn svg{width:26px;height:26px}
+ .dgrid,.coach .in{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:600px){
+ .line{grid-template-columns:32px minmax(0,1fr);grid-template-areas:"s t" ". b"}
+ .line .spk{grid-area:s}.line .txt{grid-area:t;font-size:19px}.line .lbtn{grid-area:b}
+ .days{grid-template-columns:repeat(7,minmax(0,1fr))}
+ .stamp{position:static;display:inline-block;margin-top:10px;transform:none}
+ .pstats{grid-template-columns:minmax(0,1fr)}.dlg .row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header class="band top">
+  <div class="in">
+    <div>
+      <p class="kicker" id="dateLine">오늘의 대화</p>
+      <h1>Daily Speaking</h1>
+      <p class="tag">음소 단위 발음 평가와 원어민 억양 비교로 매일 한 편씩</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="streak">0일</b><span>연속 달성</span></div>
+      <div class="stat"><b id="todayBest">–</b><span>오늘 최고 (전체 읽기)</span></div>
+      <div class="stat"><b id="targetShow">80점</b><span>목표</span></div>
+      <button class="btn" id="openSettings">설정</button>
+    </div>
+  </div>
+</header>
+
+<main class="band main">
+  <div class="in">
+    <section class="script" aria-labelledby="dlgTitle">
+      <p class="topic" id="dlgTopic"></p>
+      <h2 id="dlgTitle">Loading…</h2>
+      <p class="scene" id="dlgScene"></p>
+      <div class="acts">
+        <button class="btn" id="playAll"></button>
+        <label class="rate">원어민 속도 <select id="rate"><option value="-25%">느리게</option><option value="-10%">조금 느리게</option><option value="0%" selected>보통</option></select></label>
+        <button class="btn" id="changeBtn" aria-expanded="false" aria-controls="changePanel">다른 대화</button>
+      </div>
+      <div class="change" id="changePanel" hidden>
+        <select id="topicSel" aria-label="주제"></select>
+        <button class="btn solid" id="genBtn">만들기</button>
+        <input type="text" id="topicFree" placeholder="예) Asking IT for VPN access" aria-label="직접 입력 주제" hidden>
+        <p class="note" id="genNote"></p>
+      </div>
+      <p class="legend"><b>굵게</b> 강세 · <span class="sl">/</span> 끊어 읽기 · ↗ 끝 올림 · ↘ 끝 내림 · 줄을 누르면 아래에 분석이 나와요</p>
+      <ol class="lines" id="lines"></ol>
+      <div class="phr"><h3>핵심 표현</h3><dl id="phrases"></dl></div>
+      <p class="stamp" id="stamp" hidden>오늘 목표 달성</p>
+    </section>
+
+    <section class="rec" aria-label="녹음">
+      <div class="recrow">
+        <button class="recbtn" id="recBtn" aria-label="전체 읽기 시작"></button>
+        <div>
+          <p class="mode" id="modeLine">전체 읽기</p>
+          <p class="rstate" id="recState">버튼을 누르면 1번 줄부터 차례로 녹음해요.</p>
+        </div>
+      </div>
+      <div class="level" aria-hidden="true"><i id="level"></i></div>
+      <div class="recacts" id="recActs" hidden>
+        <button class="btn" id="lineDone">이 줄 끝</button>
+        <button class="btn" id="stopRun">그만하기</button>
+      </div>
+    </section>
+
+    <section class="score" aria-label="점수">
+      <div class="ringwrap">
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <circle cx="100" cy="100" r="86" fill="none" style="stroke:var(--line)" stroke-width="14"/>
+          <circle id="ring" cx="100" cy="100" r="86" fill="none" style="stroke:var(--blue)" stroke-width="14" stroke-linecap="round" transform="rotate(-90 100 100)" stroke-dasharray="540.35" stroke-dashoffset="540.35"/>
+          <line id="tick" x1="100" y1="4" x2="100" y2="26" style="stroke:var(--ink)" stroke-width="3"/>
+        </svg>
+        <div class="ringtxt"><b id="scoreNum">–</b><span id="scoreSub">목표 80점</span></div>
+      </div>
+      <p class="note" id="scoreWhat" style="text-align:center;margin-bottom:10px">전체 읽기 평균 발음 점수</p>
+      <div class="metrics">
+        <div class="mrow"><span>정확도</span><div class="bar"><i id="bAcc"></i></div><output id="mAcc">–</output></div>
+        <div class="mrow"><span>유창성</span><div class="bar"><i id="bFlu"></i></div><output id="mFlu">–</output></div>
+        <div class="mrow"><span>완성도</span><div class="bar"><i id="bComp"></i></div><output id="mComp">–</output></div>
+        <div class="mrow"><span>운율 (Azure)</span><div class="bar"><i id="bPros"></i></div><output id="mPros">–</output></div>
+        <div class="mrow"><span>억양 유사도</span><div class="bar"><i id="bSim"></i></div><output id="mSim">–</output></div>
+      </div>
+      <h3>오늘의 시도</h3>
+      <ol class="tries" id="tries"></ol>
+    </section>
+  </div>
+</main>
+
+<section class="band detail">
+  <div class="in">
+    <div class="dhead">
+      <h2 id="dTitle">줄별 분석</h2>
+      <div class="tabs" id="tabs" role="tablist" aria-label="줄 선택"></div>
+    </div>
+    <p class="note" id="dEmpty" style="margin-top:12px">녹음하면 단어·음소 점수와 원어민 억양 비교가 여기에 나와요.</p>
+    <div class="dgrid" id="dBody" hidden>
+      <div>
+        <div class="subs" id="dSubs"></div>
+        <h3>단어 (누르면 음소별로 보여요)</h3>
+        <div class="chips" id="dWords" style="margin-top:10px"></div>
+        <div class="phon" id="dPhon"></div>
+        <div class="flags" id="dFlags"></div>
+      </div>
+      <div>
+        <h3>억양: 원어민 vs 나</h3>
+        <div class="key"><span><i style="background:var(--blue)"></i>원어민 (Azure 음성)</span><span><i style="background:var(--ink)"></i>나</span><span>단어 위치에 맞춰 시간을 정렬했어요</span></div>
+        <div class="fig" id="pitchFig"><canvas id="pitch"></canvas><p class="empty" id="pitchEmpty">원어민 음성을 불러오면 음높이 곡선이 겹쳐 그려져요.</p></div>
+        <div class="pstats" id="pStats"></div>
+        <div class="pbtns">
+          <button class="btn" id="playNative">원어민 듣기</button>
+          <button class="btn" id="playMine">내 녹음 듣기</button>
+          <button class="btn" id="redoLine">이 줄 다시 녹음</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band coach">
+  <div class="in">
+    <div>
+      <h2>코치 피드백</h2>
+      <p class="note" style="margin-top:8px">Claude가 음소 점수, 운율 오류, 억양 곡선 비교 수치를 보고 가장 효과가 큰 교정 포인트를 한국어로 정리해요. 결과는 Notion 연습 기록에도 남아요.</p>
+      <p style="margin-top:14px"><button class="btn solid" id="coachBtn" disabled>피드백 받기</button></p>
+    </div>
+    <div class="coachout" id="coach"><p class="note">전체 읽기나 한 줄 연습을 마치면 받을 수 있어요.</p></div>
+  </div>
+</section>
+
+<section class="band hist">
+  <div class="in">
+    <h2>최근 2주</h2>
+    <div class="days" id="days"></div>
+    <details>
+      <summary>점수는 이렇게 매겨요</summary>
+      <ul>
+        <li><b>발음 점수</b> — Azure 발음 평가의 종합 점수(PronScore)예요. 원문과 녹음을 음소 단위로 비교해 정확도·유창성·완성도·운율을 합친 값이에요. 전체 읽기는 줄 점수의 평균이에요.</li>
+        <li><b>정확도</b> — 음소가 원어민 발음과 얼마나 가까운지. 단어 60점 미만은 발음 오류로 표시돼요.</li>
+        <li><b>유창성 / 완성도</b> — 단어 사이 쉼이 자연스러운지, 원문 단어를 빠짐없이 읽었는지예요.</li>
+        <li><b>운율 (Azure)</b> — 강세, 억양, 속도, 리듬. 어색하게 끊긴 곳, 쉬어야 할 곳, 단조로운 억양을 단어별로 알려 줘요.</li>
+        <li><b>억양 유사도</b> — 같은 문장을 Azure 원어민 음성으로 만들고, 단어 위치를 맞춘 뒤 두 음높이 곡선의 모양이 얼마나 비슷한지(상관도)를 0–100으로 바꾼 값이에요. 음높이 폭과 문장 끝 올림·내림도 함께 비교해요.</li>
+        <li><b>목표 달성</b> — 전체 읽기 평균이 목표 이상이면 그날 달성으로 기록돼요. 기록은 이 브라우저와 Notion 연습 기록에 함께 남아요.</li>
+      </ul>
+    </details>
+  </div>
+</section>
+
+<dialog id="settings">
+  <form class="dlg" method="dialog" id="setForm">
+    <h2>설정</h2>
+    <p class="note">n8n 웹훅 주소와 접속 키는 이 브라우저에만 저장돼요.</p>
+    <label>n8n 웹훅 주소<input type="url" id="sBase" placeholder="https://your-pod.pikapod.net/webhook" autocomplete="off"></label>
+    <label>접속 키<input type="password" id="sKey" placeholder="n8n Config 노드의 accessKey" autocomplete="off"></label>
+    <div class="row">
+      <label>목표 점수<select id="sTarget"><option>70</option><option>75</option><option selected>80</option><option>85</option><option>90</option></select></label>
+      <label>원어민 음성 A<select id="sVoiceA"><option>en-US-JennyNeural</option><option>en-US-AriaNeural</option><option>en-US-AvaNeural</option><option>en-US-EmmaNeural</option></select></label>
+    </div>
+    <div class="row">
+      <label>원어민 음성 B<select id="sVoiceB"><option>en-US-GuyNeural</option><option>en-US-AndrewNeural</option><option>en-US-BrianNeural</option><option>en-US-DavisNeural</option></select></label>
+      <div></div>
+    </div>
+    <p class="note" id="sNote"></p>
+    <div class="acts">
+      <button class="btn" type="button" id="sClose">닫기</button>
+      <button class="btn" type="button" id="sTest">연결 확인</button>
+      <button class="btn solid" type="submit" id="sSave">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+{
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ymd = d => d.toLocaleDateString("en-CA");
+const ICON = {
+  mic:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  play:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
+  stop:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>'
+};
+const BANK = [
+ {title:"Quick stand-up update", topic:"스탠드업", scene:"아침 스탠드업에서 진행 상황을 짧게 공유하는 장면", lines:[
+  "A|r|Morning, everyone. / Do you want to *kick us off*?",
+  "B|f|Sure. / Yesterday I *wrapped up* the *dashboard fixes* / and sent them for *review*.",
+  "A|r|Nice. / Any *blockers* on your end?",
+  "B|f|Just one. / I'm still *waiting on* access / to the *new data source*.",
+  "A|f|Got it. / I'll *ping* the platform team / right after this call.",
+  "B|f|That'd be great. / *Thanks* for *following up* on that."],
+  phrases:[["kick us off","(회의를) 먼저 시작하다"],["wrap up","마무리하다"],["waiting on","~을 받기를 기다리는 중"]]},
+ {title:"Clarifying a data request", topic:"데이터 요청", scene:"다른 팀의 데이터 요청 범위를 정확히 확인하는 장면", lines:[
+  "A|r|Hey, / could you pull the *Wi-Fi usage* numbers / for *last month*?",
+  "B|r|Sure. / Just to *make sure* I get it right, / is that for *all* airlines?",
+  "A|f|*Just* the ones in *Asia*, / and only *paid* sessions.",
+  "B|r|Got it. / Do you need it *broken down* / by *route* or by *aircraft*?",
+  "A|f|By *route* would be *perfect*.",
+  "B|f|Okay. / I'll *send it over* / by *end of day* tomorrow."],
+  phrases:[["Just to make sure I get it right","정확히 이해했는지 확인하려고요"],["broken down by","~별로 나눠서"],["send it over","보내 드리다"]]},
+ {title:"Asking for a little more time", topic:"일정 조율", scene:"마감을 조금 미뤄 달라고 정중하게 요청하는 장면", lines:[
+  "A|f|How's the *monthly report* coming along?",
+  "B|f|It's *mostly done*, / but I found a *gap* in the *source data*.",
+  "A|f|Oh, / *how big* of a gap are we talking?",
+  "B|f|About *three days* are *missing*, / so I'd like to *double-check* before I send it.",
+  "A|r|Makes sense. / Can you get it to me by *Monday*?",
+  "B|f|*Monday* works. / I'll *keep you posted* / if anything *changes*."],
+  phrases:[["How's ~ coming along?","~ 잘 진행되고 있어요?"],["double-check","한 번 더 확인하다"],["keep you posted","계속 상황을 알려 드리다"]]},
+ {title:"Explaining a dashboard number", topic:"고객 응대", scene:"항공사 고객에게 대시보드 수치가 달라진 이유를 설명하는 장면", lines:[
+  "A|f|The *session count* looks *lower* / than what we saw last week.",
+  "B|f|Good catch. / We *changed* how we count *repeat logins* / on the same flight.",
+  "A|r|So the *old number* was *inflated*?",
+  "B|f|In a way, yes. / Now *one passenger* equals *one session* per flight.",
+  "A|r|Okay, that's *clearer*. / Can we add a *note* on the dashboard?",
+  "B|f|*Absolutely*. / I'll add a *short explanation* / right under the *chart*."],
+  phrases:[["Good catch","잘 짚으셨어요"],["inflated","부풀려진"],["right under","바로 아래에"]]},
+ {title:"Handing off an issue", topic:"이슈 전달", scene:"고객 이슈를 정리해서 데이터팀에 넘기는 장면", lines:[
+  "A|f|I've got an *issue* from the customer / that I'd like to *hand off* to you.",
+  "B|f|Sure, / what's going *on*?",
+  "A|f|They think the *usage numbers* for *October* / don't *add up*.",
+  "B|r|Do you have any *examples* / we can *look into*?",
+  "A|f|Yes, / I put *three flights* and the *screenshots* / in the *ticket*.",
+  "B|f|Perfect. / We'll *take a look* / and get back to you by *Thursday*."],
+  phrases:[["hand off","(업무를) 넘기다"],["don't add up","(숫자가) 안 맞는다"],["get back to you","다시 연락드리다"]]},
+ {title:"Wrapping up a meeting", topic:"회의", scene:"회의를 정리하고 다음 할 일을 확인하는 장면", lines:[
+  "A|f|We're almost *out of time*, / so let's *wrap* things *up*.",
+  "B|f|Sure. / I'll *update* the *query*, / and you'll *confirm* the *definitions*.",
+  "A|f|*Right*. / And what about the *timeline*?",
+  "B|r|We said *next Friday* / for the *first draft*, / right?",
+  "A|f|*Yes*. / I'll *send out* a quick *summary* / after the call.",
+  "B|f|*Perfect*. / *Thanks*, everyone."],
+  phrases:[["wrap things up","마무리하다"],["first draft","초안"],["send out a summary","요약을 공유하다"]]},
+ {title:"Pushing back politely", topic:"범위 조율", scene:"추가 요청을 받고 일정 영향을 설명하며 조율하는 장면", lines:[
+  "A|r|Could you also add *passenger journey* data / to this report?",
+  "B|f|I'd be *happy* to, / but it might *push back* the *release*.",
+  "A|f|Oh, / by *how much*?",
+  "B|f|Probably *a week*. / The *data model* needs some *changes* first.",
+  "A|r|I see. / Can we *ship* what we have / and add it *later*?",
+  "B|f|That *works* for me. / I'll put it in the *next sprint*."],
+  phrases:[["I'd be happy to, but…","기꺼이 하겠지만…"],["push back the release","출시를 미루다"],["ship what we have","있는 것부터 내보내다"]]},
+ {title:"Monday small talk", topic:"스몰톡", scene:"월요일 아침 동료와 가볍게 주말 이야기를 나누는 장면", lines:[
+  "A|f|Hey, / how was your *weekend*?",
+  "B|f|Pretty *good*, thanks. / I went for a *long run* / along the *beach*.",
+  "A|f|*Nice*. / How *far* did you go?",
+  "B|f|About *twelve miles*. / My *legs* are still a little *sore*.",
+  "A|f|*Wow*, / I can *barely* do *three*.",
+  "B|f|It just takes *time*. / You should *join* me *sometime*."],
+  phrases:[["How was your weekend?","주말 어땠어요?"],["sore","(근육이) 뻐근한"],["You should join me sometime","언제 같이 해요"]]},
+ {title:"Asking someone to repeat", topic:"화상회의", scene:"화상회의에서 잘 못 들은 부분을 다시 확인하는 장면", lines:[
+  "A|f|So the *new tags* should go *live* / on the *fifteenth*.",
+  "B|r|Sorry, / you *cut out* for a second. / Could you *say that again*?",
+  "A|f|*Sure*. / The *new tags* go live / on *November fifteenth*.",
+  "B|r|Got it, thanks. / And that's for the *whole fleet*?",
+  "A|f|*Not yet*. / Just the *first ten* aircraft / *for now*.",
+  "B|f|Okay. / I'll *note* that / in the *meeting notes*."],
+  phrases:[["You cut out","(소리가) 끊겼어요"],["Could you say that again?","다시 말씀해 주시겠어요?"],["for now","일단은"]]},
+ {title:"Flagging a data issue", topic:"데이터 이상", scene:"데이터 이상치를 발견하고 동료에게 알리는 장면", lines:[
+  "A|f|Do you have a *minute*? / I think I *found* something *weird*.",
+  "B|f|*Sure*. / What did you *find*?",
+  "A|f|*Usage* on *two aircraft* / *dropped to zero* / last *Tuesday*.",
+  "B|r|Oh no. / Could it be a *logging issue* / on the *aircraft side*?",
+  "A|f|Maybe. / I'll *check* the *raw logs* / before we *raise* it.",
+  "B|f|Good *idea*. / Let me know what you *find*."],
+  phrases:[["Do you have a minute?","잠깐 시간 돼요?"],["dropped to zero","0으로 떨어졌다"],["raise it","(이슈를) 제기하다"]]},
+ {title:"One-on-one with your manager", topic:"1:1 미팅", scene:"매니저와 1:1에서 업무 우선순위를 상의하는 장면", lines:[
+  "A|f|So, / how are things *going* / with your *projects*?",
+  "B|f|*Mostly* on track, / but I have *too many* things / *in flight* right now.",
+  "A|f|Okay. / Which one is the *top priority* for you?",
+  "B|f|I'd say the *dashboard release*, / since the *customer* is *waiting*.",
+  "A|f|Agreed. / Let's *move* the *other request* / to *next week*.",
+  "B|f|That *helps* a lot. / *Thanks* for *backing me up*."],
+  phrases:[["on track","순조롭게 진행 중"],["in flight","진행 중인 (일)"],["back me up","나를 지원해 주다"]]},
+ {title:"Following up on a ticket", topic:"티켓 follow-up", scene:"진행이 멈춘 티켓을 부드럽게 재촉하는 장면", lines:[
+  "A|f|Hi, / just *following up* on the *ticket* I sent / last *week*.",
+  "B|f|Oh, *sorry* about that. / It *slipped through the cracks*.",
+  "A|r|No *worries*. / Do you think you could *take a look* this week?",
+  "B|r|*Definitely*. / Is it *still* the *same issue* / with the *login data*?",
+  "A|f|*Yes*, / and the customer is *asking* for an *update*.",
+  "B|f|Got it. / I'll *prioritize* it / and get back to you *tomorrow*."],
+  phrases:[["just following up on","~ 관련해서 다시 연락드려요"],["slipped through the cracks","깜빡 놓쳤다"],["No worries","괜찮아요"]]}
+];
+const TOPICS = [
+ ["Giving a stand-up status update","스탠드업 진행 상황 공유"],
+ ["Clarifying the scope of a data request","데이터 요청 범위 확인"],
+ ["Asking for a deadline extension","마감 연장 요청"],
+ ["Explaining a dashboard metric to an airline customer","항공사 고객에게 지표 설명"],
+ ["Handing off a customer issue to the data team","이슈를 데이터팀에 넘기기"],
+ ["Wrapping up a meeting with next steps","회의 마무리와 다음 단계"],
+ ["Pushing back politely on extra scope","정중하게 범위 조율하기"],
+ ["Disagreeing respectfully in a meeting","회의에서 다른 의견 내기"],
+ ["Monday small talk with a coworker","월요일 스몰톡"],
+ ["Asking someone to repeat on a video call","화상회의에서 다시 묻기"],
+ ["Reporting a data anomaly","데이터 이상 보고"],
+ ["One-on-one with a manager about priorities","매니저와 1:1"],
+ ["Following up on a stalled ticket","멈춘 티켓 follow-up"],
+ ["Giving a short demo of a new dashboard","새 대시보드 짧은 데모"],
+ ["Onboarding a new teammate","새 팀원 온보딩"]
+];
+
+
+/* ---------- storage ---------- */
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem("dsc2:" + k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem("dsc2:" + k, JSON.stringify(v)); }catch(e){} }
+};
+const S = {
+  today: ymd(new Date()), dlg: null, words: [], res: {}, cmp: {}, native: {}, sel: 0, selWord: null,
+  set: Object.assign({base:"", key:"", target:80, voiceA:"en-US-JennyNeural", voiceB:"en-US-GuyNeural"}, LS.get("settings", {})),
+  days: LS.get("days", {}), tries: LS.get("tries:" + ymd(new Date()), []), lastLogId: null, last: null, busy: false
+};
+const configured = () => !!(S.set.base && S.set.key);
+
+/* ---------- text helpers ---------- */
+function parseWords(t){
+  const out = []; let open = false;
+  for(let w of String(t).split(/\s+/).filter(Boolean)){
+    if(w === "/"){ if(out.length) out[out.length-1].br = true; continue; }
+    let s = open;
+    if(w.startsWith("*")){ s = true; open = true; w = w.slice(1); }
+    const m = w.match(/\*([^A-Za-z0-9]*)$/);
+    if(m){ w = w.slice(0, m.index) + m[1]; open = false; }
+    w = w.replace(/\*/g, "");
+    if(w) out.push({w, stress: s, br: false});
+  }
+  return out;
+}
+const plain = t => String(t).replace(/\*/g, "").replace(/\s\/\s/g, " ").replace(/\s+/g, " ").trim();
+const simple = w => String(w).toLowerCase().replace(/[^a-z0-9]/g, "");
+function matchPairs(A, B){ // indices of equal items along an edit-distance alignment
+  const n = A.length, m = B.length, W = m + 1, D = new Int32Array((n+1)*W);
+  for(let i = 0; i <= n; i++) D[i*W] = i; for(let j = 0; j <= m; j++) D[j] = j;
+  for(let i = 1; i <= n; i++) for(let j = 1; j <= m; j++) D[i*W+j] = Math.min(D[(i-1)*W+j-1] + (A[i-1] === B[j-1] ? 0 : 1), D[(i-1)*W+j] + 1, D[i*W+j-1] + 1);
+  const out = []; let i = n, j = m;
+  while(i > 0 && j > 0){
+    const c = A[i-1] === B[j-1] ? 0 : 1;
+    if(D[i*W+j] === D[(i-1)*W+j-1] + c){ out.push([i-1, j-1, c === 0]); i--; j--; }
+    else if(D[i*W+j] === D[(i-1)*W+j] + 1) i--; else j--;
+  }
+  return out.reverse();
+}
+function toDialogue(src){
+  const lines = (src.lines || []).map(l => {
+    if(typeof l === "string"){ const [s,u,...t] = l.split("|"); return {s, u, t: t.join("|")}; }
+    const tune = String(l.tune || l.u || "");
+    return {s: l.s === "B" ? "B" : "A", u: /^r/i.test(tune) ? "r" : "f", t: String(l.t || l.text || "").slice(0, 240)};
+  }).filter(l => plain(l.t));
+  const phrases = (src.phrases || []).map(p => Array.isArray(p) ? p : [p.en, p.ko]).filter(p => p[0]).slice(0, 4);
+  return {title: String(src.title || "Today's dialogue").slice(0, 80), scene: String(src.scene || "").slice(0, 160), topic: String(src.topic || "").slice(0, 60), lines, phrases};
+}
+const rotIdx = () => { const d = Math.floor((new Date(S.today + "T12:00:00") - new Date("2026-01-01T12:00:00")) / 864e5); return ((d % BANK.length) + BANK.length) % BANK.length; };
+
+/* ---------- n8n API ---------- */
+async function api(path, params = {}, body){
+  if(!configured()) throw {code:"config"};
+  const u = new URL(S.set.base.replace(/\/+$/, "") + "/" + path);
+  u.searchParams.set("key", S.set.key);
+  for(const k in params) if(params[k] != null) u.searchParams.set(k, params[k]);
+  let res;
+  try{
+    res = await fetch(u, body ? {method:"POST", body: new URLSearchParams({data: JSON.stringify(body)})} : {method:"GET"});
+  }catch(e){ throw {code:"network"}; }
+  if(res.status === 401) throw {code:"auth"};
+  if(!res.ok) throw {code:"http", status: res.status};
+  const t = await res.text();
+  try{ return JSON.parse(t); }catch(e){ throw {code:"json"}; }
+}
+const API_ERR = {config:"설정에서 n8n 주소와 접속 키를 넣어 주세요.", network:"n8n에 연결할 수 없어요. 주소와 워크플로 활성화 상태를 확인해 주세요.", auth:"접속 키가 맞지 않아요. 설정을 확인해 주세요.", http:"n8n이 오류를 돌려줬어요. n8n 실행 기록(Executions)을 확인해 주세요.", json:"n8n 응답 형식이 이상해요."};
+const errMsg = e => (e && API_ERR[e.code]) || (e && e.message) || String(e || "알 수 없는 오류");
+
+/* ---------- Azure token ---------- */
+let tok = null;
+async function token(){
+  if(tok && Date.now() - tok.at < 8 * 60e3) return tok;
+  const r = await api("speaking-token");
+  if(!r || !r.token) throw {message:"Azure 토큰을 받지 못했어요. n8n의 Azure 키·리전 설정을 확인해 주세요."};
+  tok = {token: r.token, region: r.region, at: Date.now()};
+  return tok;
+}
+function speechCfg(t){ const c = SpeechSDK.SpeechConfig.fromAuthorizationToken(t.token, t.region); c.speechRecognitionLanguage = "en-US"; return c; }
+
+/* ---------- microphone (16 kHz mono) ---------- */
+let mic = null;
+async function openMic(){
+  if(mic) { if(mic.ctx.state === "suspended") await mic.ctx.resume(); return mic; }
+  const stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:true}});
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const step = ctx.sampleRate / 16000; let pos = 0;
+  mic = {ctx, stream, src, proc, sink: null};
+  proc.onaudioprocess = e => {
+    const x = e.inputBuffer.getChannelData(0), out = [];
+    while(pos + step <= x.length){ let s = 0; const a = Math.floor(pos), b = Math.floor(pos + step); for(let k = a; k < b; k++) s += x[k]; out.push(s / Math.max(1, b - a)); pos += step; }
+    pos -= x.length; if(pos < 0) pos = 0;
+    const f = Float32Array.from(out);
+    let r = 0; for(let k = 0; k < x.length; k += 8) r += x[k] * x[k];
+    $("level").style.width = clamp(Math.sqrt(r / (x.length / 8)) * 600, 0, 100) + "%";
+    if(mic.sink) mic.sink(f);
+  };
+  src.connect(proc); proc.connect(ctx.destination);
+  if(ctx.state === "suspended") await ctx.resume();
+  return mic;
+}
+function toInt16(f){ const o = new Int16Array(f.length); for(let i = 0; i < f.length; i++){ const v = clamp(f[i], -1, 1); o[i] = v < 0 ? v * 0x8000 : v * 0x7fff; } return o; }
+function concat(chunks){ let n = 0; chunks.forEach(c => n += c.length); const o = new Float32Array(n); let p = 0; chunks.forEach(c => { o.set(c, p); p += c.length; }); return o; }
+
+/* ---------- one line: Azure pronunciation assessment ---------- */
+let current = null;
+function recordLine(i){
+  const t = tok, ref = plain(S.dlg.lines[i].t);
+  const push = SpeechSDK.AudioInputStream.createPushStream(SpeechSDK.AudioStreamFormat.getWaveFormatPCM(16000, 16, 1));
+  const cfg = speechCfg(t);
+  cfg.setProperty(SpeechSDK.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs, "8000");
+  cfg.setProperty(SpeechSDK.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "1200");
+  cfg.setProperty(SpeechSDK.PropertyId.Speech_SegmentationSilenceTimeoutMs, "1200");
+  const reco = new SpeechSDK.SpeechRecognizer(cfg, SpeechSDK.AudioConfig.fromStreamInput(push));
+  const pa = new SpeechSDK.PronunciationAssessmentConfig(ref, SpeechSDK.PronunciationAssessmentGradingSystem.HundredMark, SpeechSDK.PronunciationAssessmentGranularity.Phoneme, true);
+  pa.phonemeAlphabet = "IPA"; pa.nbestPhonemeCount = 5; pa.enableProsodyAssessment = true;
+  pa.applyTo(reco);
+  const chunks = []; let closed = false, doneInput;
+  const inputDone = new Promise(r => doneInput = r);
+  const finishInput = () => { if(closed) return; closed = true; if(mic && mic.sink === sink) mic.sink = null; try{ push.close(); }catch(e){} doneInput(); };
+  const sink = f => { if(closed) return; chunks.push(f); push.write(toInt16(f).buffer); };
+  mic.sink = sink;
+  current = {i, finishInput};
+  reco.speechEndDetected = () => finishInput();
+  const guard = setTimeout(finishInput, 30000);
+  const result = new Promise((resolve, reject) => {
+    reco.recognizeOnceAsync(r => { clearTimeout(guard); finishInput(); try{ reco.close(); }catch(e){} resolve({r, audio: concat(chunks)}); },
+      err => { clearTimeout(guard); finishInput(); try{ reco.close(); }catch(e){} reject({message: "Azure 인식 오류: " + err}); });
+  });
+  return {inputDone, result};
+}
+function flagsFrom(o, out = new Set()){
+  if(!o || typeof o !== "object") return out;
+  if(Array.isArray(o.ErrorTypes)) o.ErrorTypes.forEach(t => { if(t && t !== "None") out.add(t); });
+  for(const k in o) if(o[k] && typeof o[k] === "object") flagsFrom(o[k], out);
+  return out;
+}
+function parseResult({r, audio}, i){
+  if(r.reason === SpeechSDK.ResultReason.NoMatch) return {i, noMatch: true, audio};
+  if(r.reason === SpeechSDK.ResultReason.Canceled){ const c = SpeechSDK.CancellationDetails.fromResult(r); throw {message: "Azure가 요청을 취소했어요: " + (c.errorDetails || c.reason)}; }
+  const j = JSON.parse(r.properties.getProperty(SpeechSDK.PropertyId.SpeechServiceResponse_JsonResult) || "{}");
+  const nb = (j.NBest || [])[0] || {}, pa = nb.PronunciationAssessment || {};
+  const words = (nb.Words || []).map(w => {
+    const a = w.PronunciationAssessment || {}, fl = [...flagsFrom(a.Feedback)];
+    if(a.ErrorType && a.ErrorType !== "None" && !fl.includes(a.ErrorType)) fl.unshift(a.ErrorType);
+    return {w: w.Word, acc: a.AccuracyScore, err: a.ErrorType || "None", flags: fl, off: (w.Offset || 0) / 1e7, dur: (w.Duration || 0) / 1e7,
+      phon: (w.Phonemes || []).map(p => { const pp = p.PronunciationAssessment || {}, nbp = pp.NBestPhonemes || []; return {p: p.Phoneme, s: pp.AccuracyScore, heard: nbp[0] && nbp[0].Phoneme !== p.Phoneme ? nbp[0].Phoneme : null}; })};
+  });
+  const sc = {pron: pa.PronScore, acc: pa.AccuracyScore, flu: pa.FluencyScore, comp: pa.CompletenessScore, pros: pa.ProsodyScore};
+  for(const k in sc) sc[k] = sc[k] == null ? null : Math.round(sc[k]);
+  return {i, text: j.DisplayText || r.text || "", sc, words, audio, at: Date.now()};
+}
+
+/* ---------- native reference (Azure TTS) ---------- */
+const escXml = s => String(s).replace(/[<>&'"]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;","'":"&apos;",'"':"&quot;"}[c]));
+function wavToFloat(ab){
+  const v = new DataView(ab); let p = 12, sr = 16000, data = null;
+  while(p + 8 <= v.byteLength){
+    const id = String.fromCharCode(v.getUint8(p), v.getUint8(p+1), v.getUint8(p+2), v.getUint8(p+3)), size = v.getUint32(p + 4, true);
+    if(id === "fmt ") sr = v.getUint32(p + 12, true);
+    if(id === "data"){ const len = Math.min(size, v.byteLength - p - 8); data = new Int16Array(ab.slice(p + 8, p + 8 + len - (len % 2))); break; }
+    p += 8 + size + (size % 2);
+  }
+  if(!data){ const len = ab.byteLength - 44; data = new Int16Array(ab.slice(44, 44 + len - (len % 2))); }
+  const f = new Float32Array(data.length); for(let k = 0; k < data.length; k++) f[k] = data[k] / 32768;
+  return {pcm: f, sr};
+}
+async function native(i, rate = "0%"){
+  const line = S.dlg.lines[i], text = plain(line.t), voice = line.s === "B" ? S.set.voiceB : S.set.voiceA;
+  const key = [voice, rate, text].join("|");
+  if(S.native[key]) return S.native[key];
+  const t = await token();
+  const cfg = SpeechSDK.SpeechConfig.fromAuthorizationToken(t.token, t.region);
+  cfg.speechSynthesisOutputFormat = SpeechSDK.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm;
+  const syn = new SpeechSDK.SpeechSynthesizer(cfg, null);
+  const words = [];
+  syn.wordBoundary = (s, e) => { if(String(e.boundaryType) === "WordBoundary" || e.boundaryType === undefined) words.push({w: e.text, off: e.audioOffset / 1e7, dur: (e.duration || 0) / 1e7}); };
+  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US"><voice name="${voice}"><prosody rate="${rate}">${escXml(text)}</prosody></voice></speak>`;
+  const out = await new Promise((res, rej) => syn.speakSsmlAsync(ssml, r => {
+    try{ syn.close(); }catch(e){}
+    if(r.reason === SpeechSDK.ResultReason.SynthesizingAudioCompleted){ const w = wavToFloat(r.audioData); res({pcm: w.pcm, sr: w.sr, words}); }
+    else rej({message: "원어민 음성을 만들지 못했어요: " + (r.errorDetails || "")});
+  }, e => { try{ syn.close(); }catch(x){} rej({message: "원어민 음성 오류: " + e}); }));
+  S.native[key] = out;
+  return out;
+}
+
+/* ---------- playback ---------- */
+let playCtx = null, playing = null;
+function stopPlay(){ if(playing){ try{ playing.stop(); }catch(e){} playing = null; } document.querySelectorAll(".line.playing").forEach(e => e.classList.remove("playing")); }
+function playPCM(f, sr){
+  return new Promise(res => {
+    stopPlay();
+    playCtx = playCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if(playCtx.state === "suspended") playCtx.resume();
+    const b = playCtx.createBuffer(1, Math.max(1, f.length), sr); b.copyToChannel(f, 0);
+    const s = playCtx.createBufferSource(); s.buffer = b; s.connect(playCtx.destination);
+    s.onended = () => { if(playing === s) playing = null; res(); };
+    playing = s; s.start();
+  });
+}
+function browserSay(text){ return new Promise(res => { try{ const u = new SpeechSynthesisUtterance(text); u.lang = "en-US"; u.rate = {"-25%":0.8, "-10%":0.9}[$("rate").value] || 1; u.onend = res; u.onerror = res; speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){ res(); } }); }
+async function sayLine(i){
+  $("line" + i).classList.add("playing");
+  try{
+    if(configured() && window.SpeechSDK){ const n = await native(i, $("rate").value); await playPCM(n.pcm, n.sr); }
+    else await browserSay(plain(S.dlg.lines[i].t));
+  }catch(e){ await browserSay(plain(S.dlg.lines[i].t)); }
+  const el = $("line" + i); if(el) el.classList.remove("playing");
+}
+let playingAll = false;
+async function playAll(){
+  if(playingAll){ playingAll = false; stopPlay(); try{ speechSynthesis.cancel(); }catch(e){} renderPlayAll(); return; }
+  playingAll = true; renderPlayAll();
+  for(let i = 0; i < S.dlg.lines.length && playingAll; i++){ await sayLine(i); await sleep(350); }
+  playingAll = false; renderPlayAll();
+}
+function renderPlayAll(){ $("playAll").innerHTML = playingAll ? ICON.stop + " 멈추기" : ICON.play + " 원어민 전체 듣기"; }
+
+/* ---------- pitch ---------- */
+const pct = (arr, p) => { if(!arr.length) return 0; const a = Array.from(arr).sort((m, n) => m - n); return a[clamp(Math.floor(p * (a.length - 1)), 0, a.length - 1)]; };
+function track(x0, sr0){
+  const x = new Float32Array(Math.floor(x0.length / 2)); for(let i = 0; i < x.length; i++) x[i] = (x0[2*i] + x0[2*i+1]) / 2;
+  const sr = sr0 / 2, N = Math.round(sr * 0.04), HOP = Math.round(sr * 0.01), minL = Math.floor(sr / 420), maxL = Math.ceil(sr / 70);
+  const nF = Math.max(0, Math.floor((x.length - N - maxL) / HOP)); if(nF < 20) return null;
+  const rms = new Float32Array(nF), f0 = new Float32Array(nF), r = new Float32Array(maxL + 2);
+  for(let f = 0; f < nF; f++){ let e = 0; const p = f * HOP; for(let k = 0; k < N; k++) e += x[p+k] * x[p+k]; rms[f] = Math.sqrt(e / N); }
+  const thr = Math.max(pct(rms, 0.1) * 3, pct(rms, 0.95) * 0.1, 0.002);
+  for(let f = 0; f < nF; f++){
+    if(rms[f] <= thr) continue;
+    const p = f * HOP; let e0 = 0, eT = 0;
+    for(let k = 0; k < N; k++){ e0 += x[p+k] * x[p+k]; eT += x[p+minL+k] * x[p+minL+k]; }
+    let best = -1;
+    for(let t = minL; t <= maxL; t++){ let c = 0; for(let k = 0; k < N; k++) c += x[p+k] * x[p+t+k]; r[t] = c / Math.sqrt(e0 * eT + 1e-12); if(r[t] > best) best = r[t]; eT += x[p+t+N] * x[p+t+N] - x[p+t] * x[p+t]; }
+    if(best < 0.55) continue;
+    let tau = -1; for(let t = minL + 1; t < maxL; t++) if(r[t] >= r[t-1] && r[t] >= r[t+1] && r[t] >= 0.86 * best){ tau = t; break; }
+    if(tau < 0) continue;
+    const a = r[tau-1], b = r[tau], c = r[tau+1], den = a - 2*b + c;
+    f0[f] = sr / (tau + (den ? 0.5 * (a - c) / den : 0));
+  }
+  const v = []; for(let f = 0; f < nF; f++) if(f0[f]) v.push(f0[f]);
+  if(v.length < 12) return null;
+  const med = pct(v, 0.5), st = new Float32Array(nF).fill(NaN);
+  for(let f = 0; f < nF; f++){ if(!f0[f]) continue; let s = 12 * Math.log2(f0[f] / med); if(s > 8 && Math.abs(s - 12) < 8) s -= 12; else if(s < -8 && Math.abs(s + 12) < 8) s += 12; if(Math.abs(s) <= 12) st[f] = s; }
+  const sm = Float32Array.from(st);
+  for(let f = 2; f < nF - 2; f++){ if(isNaN(st[f])) continue; const w = [st[f-2],st[f-1],st[f],st[f+1],st[f+2]].filter(q => !isNaN(q)).sort((m, n) => m - n); sm[f] = w[Math.floor(w.length / 2)]; }
+  return {st: sm, hop: HOP / sr, nF};
+}
+function interp(anchors, t){ // anchors: [[a,b],...] sorted by a; maps a -> b
+  if(t <= anchors[0][0]) return anchors[0][1] + (t - anchors[0][0]);
+  for(let k = 1; k < anchors.length; k++){ const [a0,b0] = anchors[k-1], [a1,b1] = anchors[k]; if(t <= a1) return a1 === a0 ? b1 : b0 + (b1 - b0) * (t - a0) / (a1 - a0); }
+  const [a,b] = anchors[anchors.length-1]; return b + (t - a);
+}
+function endTune(tr, t0, t1){
+  const a = Math.floor(t0 / tr.hop), b = Math.min(tr.nF - 1, Math.ceil(t1 / tr.hop)), v = [];
+  for(let f = Math.max(0, a); f <= b; f++) if(!isNaN(tr.st[f])) v.push(tr.st[f]);
+  if(v.length < 6) return null;
+  const tail = v.slice(-Math.max(4, Math.floor(v.length * 0.3))), head = v.slice(0, Math.max(3, Math.floor(v.length * 0.5)));
+  const d = tail.reduce((m, q) => m + q, 0) / tail.length - pct(head, 0.5);
+  return d <= -1.2 ? "f" : d >= 1.2 ? "r" : "l";
+}
+function compare(i){
+  const res = S.res[i], nat = S.cmp[i] && S.cmp[i].nat;
+  if(!res || !nat || !res.audio) return null;
+  const tu = track(res.audio, 16000), tn = track(nat.pcm, nat.sr);
+  if(!tu || !tn) return {nat, tn, tu, sim: null};
+  const uw = res.words.filter(w => w.err !== "Omission" && w.err !== "Insertion" && w.dur > 0), nw = nat.words.filter(w => simple(w.w));
+  const pairs = matchPairs(uw.map(w => simple(w.w)), nw.map(w => simple(w.w))).filter(p => p[2]);
+  let anchors = [];
+  pairs.forEach(([a, b]) => { anchors.push([nw[b].off, uw[a].off], [nw[b].off + nw[b].dur, uw[a].off + uw[a].dur]); });
+  { const mono = []; anchors.forEach(p => { const q = mono[mono.length - 1]; if(!q || (p[0] > q[0] && p[1] > q[1])) mono.push(p); }); anchors = mono; }
+  if(anchors.length < 2){
+    const vb = tr => { let a = -1, b = -1; for(let f = 0; f < tr.nF; f++) if(!isNaN(tr.st[f])){ if(a < 0) a = f; b = f; } return [a * tr.hop, b * tr.hop]; };
+    const [na, nb] = vb(tn), [ua, ub] = vb(tu); anchors = [[na, ua], [nb, ub]];
+  }
+  const t0 = anchors[0][0], t1 = anchors[anchors.length-1][0], X = [], Y = [], series = [];
+  for(let f = 0; f < tn.nF; f++){
+    const t = f * tn.hop; if(t < t0 - 0.05 || t > t1 + 0.05) continue;
+    const uf = Math.round(interp(anchors, t) / tu.hop), us = uf >= 0 && uf < tu.nF ? tu.st[uf] : NaN, ns = tn.st[f];
+    series.push([t, ns, us]);
+    if(!isNaN(ns) && !isNaN(us)){ X.push(ns); Y.push(us); }
+  }
+  let sim = null;
+  if(X.length >= 15){
+    const mx = X.reduce((a, b) => a + b, 0) / X.length, my = Y.reduce((a, b) => a + b, 0) / Y.length;
+    let sxy = 0, sxx = 0, syy = 0; for(let k = 0; k < X.length; k++){ sxy += (X[k]-mx)*(Y[k]-my); sxx += (X[k]-mx)**2; syy += (Y[k]-my)**2; }
+    const corr = sxy / Math.sqrt(sxx * syy + 1e-9);
+    sim = Math.round(clamp(corr / 0.85, 0, 1) * 100);
+  }
+  const rng = tr => { const v = Array.from(tr.st).filter(q => !isNaN(q)); return pct(v, 0.9) - pct(v, 0.1); };
+  const lastN = nw[nw.length - 1], lastPair = pairs[pairs.length - 1];
+  const endN = lastN ? endTune(tn, lastN.off, lastN.off + lastN.dur + 0.15) : null;
+  const endU = lastPair ? endTune(tu, uw[lastPair[0]].off, uw[lastPair[0]].off + uw[lastPair[0]].dur + 0.15) : null;
+  return {nat, series, t0, t1, sim, rangeN: rng(tn), rangeU: rng(tu), endN, endU, words: nw};
+}
+async function ensureCompare(i){
+  if(!S.res[i] || S.res[i].noMatch) return;
+  try{
+    if(!S.cmp[i] || !S.cmp[i].nat || S.cmp[i].text !== plain(S.dlg.lines[i].t)) S.cmp[i] = {nat: await native(i, "0%"), text: plain(S.dlg.lines[i].t)};
+    Object.assign(S.cmp[i], compare(i) || {});
+  }catch(e){ S.cmp[i] = {error: errMsg(e)}; }
+  if(S.sel === i) renderDetail();
+  renderMetrics();
+}
+
+/* ---------- rendering: script ---------- */
+const cls = s => s == null ? "" : s >= 80 ? "hi" : s >= 60 ? "mid" : "lo";
+function lineStatus(i){
+  const res = S.res[i]; if(!res || res.noMatch) return null;
+  const aw = res.words.filter(w => w.err !== "Insertion");
+  const pairs = matchPairs(S.words[i].map(w => simple(w.w)), aw.map(w => simple(w.w)));
+  const st = {}; pairs.forEach(([a, b]) => { st[a] = aw[b]; });
+  return st;
+}
+function renderLine(i){
+  const l = S.dlg.lines[i], st = lineStatus(i);
+  $("txt" + i).innerHTML = S.words[i].map((w, k) => {
+    const a = st && st[k]; let c = "w" + (w.stress ? " st" : ""), tip = "";
+    if(a){ if(a.err === "Omission"){ c += " omit"; tip = "빠뜨림"; } else if(a.acc < 60 || a.err === "Mispronunciation"){ c += " bad"; tip = Math.round(a.acc) + "점"; } else if(a.acc < 80){ c += " mid"; tip = Math.round(a.acc) + "점"; } }
+    return `<span class="${c}"${tip ? ` title="${tip}"` : ""}>${esc(w.w)}</span>${w.br ? '<span class="sl" aria-hidden="true">/</span>' : ""}`;
+  }).join(" ") + `<span class="tune" title="${l.u === "r" ? "끝을 올려요" : "끝을 내려요"}">${l.u === "r" ? "↗" : "↘"}</span>`;
+  const b = $("lsc" + i), r = S.res[i];
+  b.textContent = r ? (r.noMatch ? "인식 안 됨" : r.sc.pron + "점") : "";
+  b.className = "lsc " + (r ? (r.noMatch ? "lo" : cls(r.sc.pron)) : "");
+}
+function renderDialogue(){
+  const d = S.dlg;
+  $("dlgTopic").textContent = d.topic ? "Topic · " + d.topic : "Today's dialogue";
+  $("dlgTitle").textContent = d.title; $("dlgScene").textContent = d.scene;
+  S.words = d.lines.map(l => parseWords(l.t)); S.res = {}; S.cmp = {}; S.sel = 0; S.selWord = null;
+  $("lines").innerHTML = d.lines.map((l, i) => `<li class="line" id="line${i}" data-i="${i}"><span class="spk spk${l.s}">${l.s}</span><p class="txt" id="txt${i}"></p><div class="lbtn"><span class="lsc" id="lsc${i}"></span><button class="ib say" data-i="${i}" aria-label="${i+1}번 줄 원어민 듣기">${ICON.play}</button><button class="ib drill" data-i="${i}" aria-label="${i+1}번 줄만 녹음">${ICON.mic}</button></div></li>`).join("");
+  d.lines.forEach((_, i) => renderLine(i));
+  $("phrases").innerHTML = d.phrases.map(([en, ko]) => `<div><dt>${esc(en)}</dt><dd>${esc(ko)}</dd></div>`).join("");
+  renderTabs(); renderDetail(); renderMetrics();
+}
+
+/* ---------- rendering: line analysis ---------- */
+const ERR_KO = {Mispronunciation:"발음 오류", Omission:"빠뜨림", Insertion:"추가로 말함", UnexpectedBreak:"어색하게 끊김", MissingBreak:"쉬어야 할 곳에서 안 쉼", Monotone:"단조로운 억양"};
+const IPA_TIP = {
+  "θ":"TH(θ): 혀끝을 윗니 사이로 살짝 내밀고 바람만 내보내요. ㅅ·ㄸ로 바뀌기 쉬워요.",
+  "ð":"TH(ð): θ와 같은 혀 위치에서 목을 울려요. ㄷ·ㅈ로 바뀌지 않게.",
+  "ɹ":"R: 혀끝이 어디에도 닿지 않게 살짝 뒤로 말고 입술을 오므려요. ㄹ처럼 튕기지 않기.",
+  "r":"R: 혀끝이 어디에도 닿지 않게 살짝 뒤로 말고 입술을 오므려요. ㄹ처럼 튕기지 않기.",
+  "ɝ":"ER(ɝ): 혀를 말아 둔 채 '어'를 길게. bird, work의 소리예요.",
+  "ɚ":"약한 ER(ɚ): 혀를 만 상태의 짧은 '어'. 끝을 '어'로 끊지 않기.",
+  "l":"L: 혀끝을 윗니 뒤 잇몸에 확실히 붙여요. 단어 끝 L은 혀 뒤를 올린 '얼'처럼.",
+  "f":"F: 윗니를 아랫입술에 대고 바람을 내보내요. ㅍ처럼 입술을 닫지 않기.",
+  "v":"V: F 입모양에 목 울림을 더해요. ㅂ처럼 두 입술을 붙이지 않기.",
+  "b":"B: 두 입술을 붙였다 떼며 목을 울려요. V와 구분.",
+  "p":"P: 첫소리 P는 바람을 세게. 끝 P는 입술만 닫고 짧게.",
+  "z":"Z: 벌 소리 'zzz'처럼 이 사이에서 울려요. ㅈ으로 바뀌지 않게. 복수형 -s가 이 소리일 때가 많아요.",
+  "s":"S: 짧은 바람소리. '스'처럼 모음을 붙이지 않기. 끝 -s를 꼭 소리 내요.",
+  "ʃ":"SH(ʃ): 입술을 둥글게 내밀고 '쉬'. S와 구분.",
+  "ʒ":"ZH(ʒ): measure의 s. ㅈ보다 부드럽게 이어지는 울림소리.",
+  "tʃ":"CH(tʃ): 입술을 내밀고 짧게 '취'.",
+  "dʒ":"J(dʒ): 입술을 내밀고 목을 울린 '쥐'. Z와 구분.",
+  "t":"T: 끝 T는 혀끝을 잇몸에 대고 숨만 끊어요. 모음 사이에서는 약한 ㄹ(flap)로 들려요.",
+  "d":"D: 목을 울리는 소리. 단어 끝 D를 빠뜨리지 않기.",
+  "k":"K: 끝 K는 혀 뒤를 붙이고 짧게 멈춰요. '크'로 늘리지 않기.",
+  "g":"G: 목을 울리는 소리. 끝 G를 삼키지 않기.",
+  "ŋ":"NG(ŋ): 혀 뒤를 올려 코로 내요. 뒤에 '그'를 붙이지 않기.",
+  "n":"N: 혀끝을 잇몸에. 끝 N을 끝까지 유지해요.",
+  "m":"M: 입술을 닫고 코로. 끝 M을 끝까지 유지해요.",
+  "h":"H: 목에서 바람만 '흐'. 빠뜨리지 않기.",
+  "w":"W: 입술을 동그랗게 모았다가 풀며 시작해요. would, work의 첫소리.",
+  "j":"Y(j): '이'로 시작하는 짧은 반모음.",
+  "ɪ":"짧은 이(ɪ): ship의 i. 힘을 빼고 짧게, '이'와 '에' 사이.",
+  "i":"긴 이(i): sheep의 ee. 입꼬리를 옆으로 당기고 길게.",
+  "æ":"æ: cat의 a. 턱을 크게 내리고 넓은 '애'. ɛ(에)와 구분.",
+  "ɛ":"ɛ: bed의 e. æ보다 입을 덜 벌린 '에'.",
+  "ʌ":"ʌ: cup의 u. 힘 뺀 짧은 '어'.",
+  "ə":"약모음(ə): 강세 없는 모음은 힘을 빼고 아주 짧게. 또박또박 읽으면 리듬이 깨져요.",
+  "ɑ":"ɑ: hot의 o(미국식). 입을 크게 벌린 '아'.",
+  "ɔ":"ɔ: law의 aw. 입술을 약간 둥글게 한 '오'와 '아' 사이.",
+  "ʊ":"짧은 우(ʊ): book의 oo. 힘 빼고 짧게.",
+  "u":"긴 우(u): food의 oo. 입술을 동그랗게 내밀고 길게.",
+  "oʊ":"oʊ: go의 o. '오'에서 '우'로 미끄러지는 이중모음. '오'로 끝내지 않기.",
+  "eɪ":"eɪ: day의 a. '에'에서 '이'로 미끄러지는 이중모음.",
+  "aɪ":"aɪ: time의 i. '아'에서 '이'로.",
+  "aʊ":"aʊ: now의 ow. '아'에서 '우'로.",
+  "ɔɪ":"ɔɪ: boy의 oy. '오'에서 '이'로."
+};
+function renderTabs(){
+  $("tabs").innerHTML = S.dlg.lines.map((l, i) => { const r = S.res[i]; const lo = r && !r.noMatch && r.sc.pron < 60; return `<button role="tab" aria-selected="${S.sel === i}" class="${S.sel === i ? "on" : ""}${lo ? " lo" : ""}" data-i="${i}">${i + 1}</button>`; }).join("");
+  document.querySelectorAll(".line").forEach(e => e.classList.toggle("sel", +e.dataset.i === S.sel));
+}
+function renderDetail(){
+  const i = S.sel, r = S.res[i];
+  $("dTitle").textContent = `${i + 1}번 줄 분석`;
+  renderTabs();
+  if(!r){ $("dBody").hidden = true; $("dEmpty").hidden = false; $("dEmpty").textContent = "이 줄은 아직 녹음하지 않았어요. 줄 옆 마이크 버튼이나 전체 읽기로 녹음해 보세요."; return; }
+  if(r.noMatch){ $("dBody").hidden = true; $("dEmpty").hidden = false; $("dEmpty").textContent = "말소리를 인식하지 못했어요. 마이크 가까이에서 다시 녹음해 보세요."; return; }
+  $("dBody").hidden = false; $("dEmpty").hidden = true;
+  const s = r.sc;
+  $("dSubs").innerHTML = [["발음", s.pron], ["정확도", s.acc], ["유창성", s.flu], ["완성도", s.comp], ["운율", s.pros]].filter(x => x[1] != null).map(([k, v]) => `<span>${k} ${v}</span>`).join("");
+  const ws = r.words;
+  if(S.selWord == null || !ws[S.selWord]){ let worst = -1, wv = 101; ws.forEach((w, k) => { if(w.err !== "Insertion" && w.acc != null && w.acc < wv){ wv = w.acc; worst = k; } }); S.selWord = worst; }
+  $("dWords").innerHTML = ws.map((w, k) => {
+    const c = w.err === "Omission" ? "omit" : w.err === "Insertion" ? "ins" : w.acc < 60 || w.err === "Mispronunciation" ? "bad" : w.acc < 80 ? "mid" : "";
+    const fl = w.flags.filter(f => f !== "Mispronunciation" && f !== "Omission" && f !== "Insertion");
+    return `<button class="wchip ${c}${k === S.selWord ? " on" : ""}" data-k="${k}">${esc(w.w)}<small>${w.err === "Omission" ? "빠짐" : w.err === "Insertion" ? "추가" : Math.round(w.acc)}</small>${fl.length ? `<em>${esc(fl.map(f => ERR_KO[f] || f).join("·"))}</em>` : ""}</button>`;
+  }).join("");
+  const w = ws[S.selWord];
+  if(w && w.phon && w.phon.length){
+    const weak = w.phon.filter(p => p.s != null && p.s < 70);
+    const tips = [...new Set(weak.map(p => IPA_TIP[p.p]).filter(Boolean))];
+    $("dPhon").hidden = false;
+    $("dPhon").innerHTML = `<h3>${esc(w.w)}</h3><div class="prow">${w.phon.map(p => `<span class="pchip ${p.s < 60 ? "bad" : p.s < 80 ? "mid" : ""}"><b>${esc(p.p)}</b><small>${p.s == null ? "–" : Math.round(p.s)}</small>${p.heard && p.s < 70 ? `<i>→ ${esc(p.heard)}처럼</i>` : ""}</span>`).join("")}</div>`
+      + (tips.length ? `<ol class="tips">${tips.map(t => `<li>${esc(t)}</li>`).join("")}</ol>` : `<p class="note">이 단어의 음소는 모두 70점 이상이에요.</p>`);
+  } else { $("dPhon").hidden = true; }
+  const flags = [];
+  ws.forEach(x => x.flags.forEach(f => { if(f === "UnexpectedBreak") flags.push(`'${x.w}' 앞에서 어색하게 끊겼어요. / 표시가 없는 곳은 이어서 말해요.`); if(f === "MissingBreak") flags.push(`'${x.w}' 앞에서 잠깐 쉬어야 자연스러워요.`); }));
+  if(ws.some(x => x.flags.includes("Monotone"))) flags.push("억양이 단조로워요. 굵은 강세 단어에서 음을 확실히 올렸다 내려 보세요.");
+  $("dFlags").innerHTML = [...new Set(flags)].map(f => `<p>${esc(f)}</p>`).join("");
+  const c = S.cmp[i];
+  const ps = [];
+  if(c && c.error) ps.push(`<div class="ps" style="grid-column:1/-1"><span>억양 비교</span><p class="err">${esc(c.error)}</p></div>`);
+  else if(c && c.series){
+    const NAME = {f:"↘ 내림", r:"↗ 올림", l:"→ 평탄"};
+    ps.push(`<div class="ps"><span>억양 유사도</span><b>${c.sim == null ? "–" : c.sim}</b></div>`);
+    ps.push(`<div class="ps"><span>음높이 폭 (원어민 대비)</span><b>${c.rangeN ? Math.round(100 * c.rangeU / c.rangeN) + "%" : "–"}</b></div>`);
+    ps.push(`<div class="ps"><span>문장 끝 · 원어민 / 나</span><b style="color:${c.endN && c.endU && c.endN !== c.endU ? "var(--red)" : "inherit"}">${c.endN ? NAME[c.endN].split(" ")[0] : "–"} / ${c.endU ? NAME[c.endU].split(" ")[0] : "–"}</b></div>`);
+  } else ps.push(`<div class="ps" style="grid-column:1/-1"><span>억양 비교</span><p class="note">원어민 음성을 불러오는 중…</p></div>`);
+  $("pStats").innerHTML = ps.join("");
+  drawPitch();
+}
+const probe = document.createElement("span"); probe.style.display = "none"; document.body.appendChild(probe);
+const cssColor = v => { probe.style.color = `var(${v})`; return getComputedStyle(probe).color; };
+function drawPitch(){
+  const cv = $("pitch"), c = S.cmp[S.sel];
+  const ok = c && c.series && c.series.length > 5;
+  $("pitchEmpty").hidden = !!ok;
+  const W = cv.clientWidth, H = cv.clientHeight, dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  if(!ok || W < 60) return;
+  const C = {ink: cssColor("--ink"), mute: cssColor("--mute"), line: cssColor("--line"), blue: cssColor("--blue")};
+  const L = 36, R = 12, T = 16, B = 44, pw = W - L - R, ph = H - T - B;
+  const X = t => L + (t - c.t0) / Math.max(0.01, c.t1 - c.t0) * pw, Y = s => T + (1 - (clamp(s, -10, 10) + 10) / 20) * ph;
+  g.font = "12px Inter, system-ui, sans-serif"; g.textBaseline = "middle";
+  [-6, 0, 6].forEach(v => { g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(L, Y(v)); g.lineTo(W - R, Y(v)); g.stroke(); g.fillStyle = C.mute; g.textAlign = "right"; g.fillText((v > 0 ? "+" : "") + v, L - 6, Y(v)); });
+  const stressed = new Set(S.words[S.sel].filter(w => w.stress).map(w => simple(w.w)));
+  const ends = [-99, -99];
+  c.words.forEach(w => {
+    if(w.off < c.t0 - 0.05 || w.off > c.t1) return;
+    const x = X(w.off); g.strokeStyle = C.line; g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + ph); g.stroke();
+    const isS = stressed.has(simple(w.w));
+    g.font = (isS ? "700 " : "") + "12px Inter, system-ui, sans-serif"; g.fillStyle = isS ? C.ink : C.mute; g.textAlign = "left";
+    const tw = g.measureText(w.w).width, row = x + 2 > ends[0] + 4 ? 0 : x + 2 > ends[1] + 4 ? 1 : -1;
+    if(row >= 0 && x + 2 + tw <= W){ g.fillText(w.w, x + 2, H - B + 12 + row * 16); ends[row] = x + 2 + tw; }
+  });
+  const line = (k, col, width, alpha) => { g.strokeStyle = col; g.globalAlpha = alpha; g.lineWidth = width; g.lineJoin = "round"; g.beginPath(); let pen = false, prev = -9; c.series.forEach(([t, n, u], idx) => { const v = k ? u : n; if(isNaN(v)){ return; } if(!pen || idx - prev > 3){ g.moveTo(X(t), Y(v)); pen = true; } else g.lineTo(X(t), Y(v)); prev = idx; }); g.stroke(); g.globalAlpha = 1; };
+  line(0, C.blue, 5, 0.55); line(1, C.ink, 2.2, 1);
+}
+
+/* ---------- rendering: scores ---------- */
+function runAvg(){
+  const rs = S.dlg.lines.map((_, i) => S.res[i]).filter(r => r && !r.noMatch);
+  if(!rs.length) return null;
+  const avg = k => { const v = rs.map(r => r.sc[k]).filter(x => x != null); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
+  const sims = S.dlg.lines.map((_, i) => S.cmp[i] && S.cmp[i].sim).filter(x => x != null);
+  return {pron: avg("pron"), acc: avg("acc"), flu: avg("flu"), comp: avg("comp"), pros: avg("pros"), sim: sims.length ? Math.round(sims.reduce((a, b) => a + b, 0) / sims.length) : null, n: rs.length};
+}
+function setRing(v){
+  const Cc = 540.35;
+  $("ring").setAttribute("stroke-dashoffset", v == null ? Cc : Cc * (1 - v / 100));
+  $("ring").style.stroke = v != null && v < S.set.target ? "var(--red)" : "var(--blue)";
+  $("scoreNum").textContent = v == null ? "–" : v;
+  const a = (S.set.target / 100) * 2 * Math.PI, x = 100 + Math.sin(a) * 86, y = 100 - Math.cos(a) * 86, dx = Math.sin(a) * 12, dy = -Math.cos(a) * 12;
+  const t = $("tick"); t.setAttribute("x1", x - dx); t.setAttribute("y1", y - dy); t.setAttribute("x2", x + dx); t.setAttribute("y2", y + dy);
+  $("scoreSub").textContent = v == null ? `목표 ${S.set.target}점` : v >= S.set.target ? `목표 ${S.set.target}점 통과` : `목표까지 ${S.set.target - v}점`;
+}
+function renderMetrics(){
+  const a = runAvg();
+  setRing(a ? a.pron : null);
+  $("scoreWhat").textContent = a ? `녹음한 ${a.n}/${S.dlg.lines.length}줄의 평균 발음 점수` : "전체 읽기 평균 발음 점수";
+  [["Acc","acc"],["Flu","flu"],["Comp","comp"],["Pros","pros"],["Sim","sim"]].forEach(([id, k]) => { const v = a ? a[k] : null; $("m" + id).textContent = v == null ? "–" : v; $("b" + id).style.width = (v || 0) + "%"; });
+}
+function renderStats(){
+  const day = S.days[S.today];
+  $("todayBest").textContent = day && day.best ? day.best + "점" : "–";
+  $("targetShow").textContent = S.set.target + "점";
+  let n = 0; const d = new Date(S.today + "T12:00:00");
+  if(!(S.days[S.today] && S.days[S.today].passed)) d.setDate(d.getDate() - 1);
+  while(S.days[ymd(d)] && S.days[ymd(d)].passed){ n++; d.setDate(d.getDate() - 1); }
+  $("streak").textContent = n + "일";
+  $("dateLine").textContent = new Date(S.today + "T12:00:00").toLocaleDateString("ko-KR", {month:"long", day:"numeric", weekday:"short"}) + " · 오늘의 대화";
+  $("stamp").hidden = !(day && day.passed);
+  $("tries").innerHTML = S.tries.slice().reverse().slice(0, 30).map((x, k, arr) => `<li><span>#${S.tries.length - k} · ${x.m === "all" ? "전체 읽기" : x.m + "번 줄"} · ${new Date(x.at).toLocaleTimeString("ko-KR", {hour:"numeric", minute:"2-digit"})}</span><span class="${x.m === "all" && x.t >= S.set.target ? "pass" : ""}">${x.t}점${x.m === "all" && x.t >= S.set.target ? " · 통과" : ""}</span></li>`).join("");
+  const cells = [], c = new Date(S.today + "T12:00:00"); c.setDate(c.getDate() - 13);
+  for(let k = 0; k < 14; k++){ const key = ymd(c), dd = S.days[key], b = dd ? dd.best || 0 : 0; cells.push(`<div class="day${dd && dd.passed ? " pass" : ""}${key === S.today ? " today" : ""}" title="${key}"><div class="col"><i style="height:${b}%"></i></div><b>${b || ""}</b><span>${key === S.today ? "오늘" : c.getDate() + "일"}</span></div>`); c.setDate(c.getDate() + 1); }
+  $("days").innerHTML = cells.join("");
+}
+
+/* ---------- recording flow ---------- */
+const MIC_ERR = {NotAllowedError:"마이크 권한이 막혀 있어요. 주소창 왼쪽 자물쇠 아이콘에서 마이크를 허용해 주세요.", NotFoundError:"마이크를 찾지 못했어요."};
+function setState(t){ $("recState").textContent = t; }
+function setRecUI(on){
+  const b = $("recBtn"); b.classList.toggle("live", on); b.innerHTML = on ? ICON.stop : ICON.mic;
+  b.setAttribute("aria-label", on ? "그만하기" : "전체 읽기 시작");
+  $("recActs").hidden = !on;
+  document.querySelectorAll(".drill").forEach(x => x.disabled = on);
+}
+function markCur(i){ document.querySelectorAll(".line.cur").forEach(e => e.classList.remove("cur")); if(i != null && $("line" + i)) $("line" + i).classList.add("cur"); }
+async function prepare(){
+  if(!window.SpeechSDK) throw {message:"Azure Speech SDK를 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요."};
+  if(!configured()){ openSettings(); throw {code:"config"}; }
+  setState("준비 중…");
+  try{ await openMic(); }catch(e){ throw {message: MIC_ERR[e && e.name] || "마이크를 열지 못했어요."}; }
+  await token();
+}
+let stopFlag = false;
+async function runAll(){
+  if(S.busy){ stopFlag = true; if(current) current.finishInput(); return; }
+  S.busy = true; stopFlag = false; stopPlay(); setRecUI(true); $("modeLine").textContent = "전체 읽기";
+  const pending = [];
+  try{
+    await prepare();
+    S.res = {}; S.cmp = {}; S.dlg.lines.forEach((_, i) => renderLine(i)); renderMetrics(); renderDetail();
+    for(let i = 0; i < S.dlg.lines.length && !stopFlag; i++){
+      await token();
+      markCur(i); S.sel = i; renderTabs();
+      setState(`${i + 1}번 줄(${S.dlg.lines[i].s})을 읽어 주세요. 다 읽고 잠깐 쉬면 다음 줄로 넘어가요.`);
+      const {inputDone, result} = recordLine(i);
+      pending.push(result.then(out => handleResult(out, i, "all")).catch(e => setState(errMsg(e))));
+      await inputDone;
+      await sleep(150);
+    }
+    markCur(null);
+    setState("채점을 마무리하는 중…");
+    await Promise.all(pending);
+    if(!stopFlag) finishRun(); else setState("중단했어요. 녹음한 줄은 분석을 볼 수 있어요.");
+  }catch(e){ setState(errMsg(e)); }
+  finally{ S.busy = false; current = null; markCur(null); setRecUI(false); $("level").style.width = "0"; }
+}
+async function drill(i){
+  if(S.busy) return;
+  S.busy = true; stopPlay(); setRecUI(true); $("modeLine").textContent = `${i + 1}번 줄 연습`;
+  try{
+    await prepare();
+    markCur(i); setState(`${i + 1}번 줄을 읽어 주세요.`);
+    const {result} = recordLine(i);
+    const out = await result;
+    const r = handleResult(out, i, "line");
+    if(r && !r.noMatch){
+      S.tries.push({at: r.at, m: i + 1, t: r.sc.pron}); LS.set("tries:" + S.today, S.tries); renderStats();
+      setState(`${i + 1}번 줄 ${r.sc.pron}점. 아래 분석에서 빨간 음소를 확인해 보세요.`);
+      logAttempt("한 줄", i, r.sc, weakOf([i]), r.text);
+    }
+  }catch(e){ setState(errMsg(e)); }
+  finally{ S.busy = false; current = null; markCur(null); setRecUI(false); $("level").style.width = "0"; }
+}
+function handleResult(out, i, mode){
+  const r = parseResult(out, i);
+  S.res[i] = r; S.last = mode === "all" ? {mode:"all"} : {mode:"line", i};
+  renderLine(i); renderMetrics();
+  if(S.sel === i || mode === "line"){ S.sel = i; S.selWord = null; renderDetail(); }
+  $("coachBtn").disabled = false;
+  if(!r.noMatch) ensureCompare(i);
+  else if(mode === "line") setState("말소리를 인식하지 못했어요. 다시 녹음해 주세요.");
+  return r;
+}
+function weakOf(idx){
+  const out = [];
+  idx.forEach(i => { const r = S.res[i]; if(!r || r.noMatch) return; r.words.forEach(w => { if(w.err === "Omission") out.push(`${w.w}(빠짐)`); else if(w.err !== "Insertion" && w.acc < 70) out.push(`${w.w}(${Math.round(w.acc)})`); }); });
+  return out.join(", ");
+}
+function finishRun(){
+  const a = runAvg();
+  if(!a){ setState("인식된 줄이 없어요. 마이크를 확인하고 다시 해 보세요."); return; }
+  const pass = a.n === S.dlg.lines.length && a.pron >= S.set.target;
+  const day = S.days[S.today] || {best: 0, passed: false};
+  day.best = Math.max(day.best || 0, a.pron); day.passed = day.passed || pass; S.days[S.today] = day; LS.set("days", S.days);
+  S.tries.push({at: Date.now(), m: "all", t: a.pron}); LS.set("tries:" + S.today, S.tries);
+  renderStats();
+  const worst = S.dlg.lines.map((_, i) => [i, S.res[i]]).filter(x => x[1] && !x[1].noMatch).sort((p, q) => p[1].sc.pron - q[1].sc.pron)[0];
+  setState(pass ? `평균 ${a.pron}점, 목표 통과! 코치 피드백으로 남은 약점을 확인해 보세요.` : `평균 ${a.pron}점. 가장 낮은 ${worst[0] + 1}번 줄부터 줄별 연습을 해 보세요.`);
+  if(worst){ S.sel = worst[0]; S.selWord = null; renderDetail(); }
+  logAttempt("전체 읽기", null, a, weakOf(S.dlg.lines.map((_, i) => i)), S.dlg.lines.map((_, i) => S.res[i] && S.res[i].text).filter(Boolean).join(" / "), pass);
+}
+async function logAttempt(mode, i, sc, weak, heard, pass){
+  if(!configured()) return;
+  try{
+    const r = await api("speaking-log", {}, {date: S.today, title: S.dlg.title, mode, line: i == null ? null : i + 1, score: sc.pron, accuracy: sc.acc, fluency: sc.flu, completeness: sc.comp, prosody: sc.pros, passed: !!pass, weak, heard: String(heard || "").slice(0, 1800)});
+    S.lastLogId = r && r.id || null;
+  }catch(e){ /* logging is best-effort */ }
+}
+
+/* ---------- coach ---------- */
+function coachPrompt(){
+  const idx = S.last && S.last.mode === "line" ? [S.last.i] : S.dlg.lines.map((_, i) => i);
+  const parts = idx.map(i => {
+    const l = S.dlg.lines[i], r = S.res[i], c = S.cmp[i] || {};
+    if(!r) return `Line ${i+1} (${l.s}): "${plain(l.t)}" — not recorded.`;
+    if(r.noMatch) return `Line ${i+1} (${l.s}): "${plain(l.t)}" — speech not recognized.`;
+    const weak = r.words.filter(w => w.err !== "None" || (w.acc != null && w.acc < 75)).slice(0, 8).map(w => {
+      const ph = (w.phon || []).filter(p => p.s != null && p.s < 70).map(p => `/${p.p}/ ${Math.round(p.s)}${p.heard ? " (sounded like /" + p.heard + "/)" : ""}`).join(", ");
+      return `   - "${w.w}" ${w.err === "Omission" ? "omitted" : Math.round(w.acc)}${w.err !== "None" ? " [" + w.err + "]" : ""}${w.flags.length ? " flags: " + w.flags.join("/") : ""}${ph ? " · weak phonemes: " + ph : ""}`;
+    }).join("\n");
+    return `Line ${i+1} (${l.s}, intended ending: ${l.u === "r" ? "rise" : "fall"}, stressed words marked with *): "${l.t}"
+   Azure scores: pron ${r.sc.pron}, accuracy ${r.sc.acc}, fluency ${r.sc.flu}, completeness ${r.sc.comp}, prosody ${r.sc.pros}
+   Recognized: "${r.text}"
+${weak || "   - no weak words"}
+   Pitch vs native TTS: contour similarity ${c.sim == null ? "n/a" : c.sim + "/100"}, his pitch range ${c.rangeN ? Math.round(100 * c.rangeU / c.rangeN) + "% of native" : "n/a"}, ending native ${c.endN || "?"} vs his ${c.endU || "?"} (f=fall, r=rise, l=flat)`;
+  }).join("\n\n");
+  return `You are a precise, warm American-English pronunciation and intonation coach. The learner is a Korean-speaking professional (data engineer and business analyst in airline in-flight connectivity). Write explanations in natural, concise Korean (존댓말). Keep English for words, IPA symbols, examples and drills.
+
+Below are Azure pronunciation-assessment results (0-100, phoneme level, IPA) for workplace dialogue lines he read aloud, plus pitch measurements comparing his intonation with a native TTS reading of the same line (time-aligned by words).
+
+${parts}
+
+Task:
+1. Pick the 3 most impactful pronunciation fixes, grounded in the phoneme evidence. For each, say which Korean sound habit likely causes it and give concrete mouth/tongue instructions and a short drill phrase.
+2. Give up to 3 intonation/rhythm fixes grounded in the prosody flags and pitch numbers (stress on content words, thought groups, sentence-final tune, pitch range).
+3. One focus for the next attempt.
+Do not invent problems the data does not show. If scores are high, say so briefly and focus on the finer points.
+
+Reply with only JSON:
+{"summary":"한두 문장 총평","fixes":[{"word":"word","ipa":"/θ/","issue":"무엇이 문제인지","how":"입모양·혀 위치로 고치는 법","drill":"short English drill"}],"rhythm":[{"line":1,"tip":"억양·리듬 팁"}],"next":"다음 시도에서 집중할 한 가지"}
+Keep each Korean string under 110 characters.`;
+}
+async function coach(){
+  if(!S.last) return;
+  if(!configured()){ openSettings(); return; }
+  $("coachBtn").disabled = true;
+  $("coach").innerHTML = '<p class="note">Claude가 분석 중이에요… (보통 10–40초)</p>';
+  try{
+    const r = await api("speaking-coach", {}, {prompt: coachPrompt(), logId: S.lastLogId});
+    const text = String(r && r.text || "");
+    const a = text.indexOf("{"), b = text.lastIndexOf("}");
+    const j = JSON.parse(text.slice(a, b + 1));
+    const fx = Array.isArray(j.fixes) ? j.fixes.slice(0, 3) : [], rh = Array.isArray(j.rhythm) ? j.rhythm.slice(0, 3) : [];
+    $("coach").innerHTML = (j.summary ? `<p class="sum">${esc(j.summary)}</p>` : "")
+      + fx.map((f, k) => `<div class="fx"><b>${esc(f.word)}</b> <span class="note">${esc(f.ipa || "")}</span><p>${esc(f.issue)}</p><p class="note">${esc(f.how)}</p>${f.drill ? `<p class="drill"><button class="ib sayx" data-k="${k}" aria-label="연습 문장 듣기">${ICON.play}</button><span>${esc(f.drill)}</span></p>` : ""}</div>`).join("")
+      + (rh.length ? `<div><h3>억양·리듬</h3><ol>${rh.map(x => `<li>${x.line ? `<b>${esc(x.line)}번 줄</b> · ` : ""}${esc(x.tip)}</li>`).join("")}</ol></div>` : "")
+      + (j.next ? `<p class="next">다음 시도: ${esc(j.next)}</p>` : "");
+    $("coach").querySelectorAll(".sayx").forEach(btn => btn.addEventListener("click", () => sayText(String(fx[+btn.dataset.k].drill))));
+  }catch(e){
+    $("coach").innerHTML = `<p class="err">${esc(e && e.code ? errMsg(e) : "피드백을 읽지 못했어요. 다시 시도해 주세요.")}</p>`;
+  }finally{ $("coachBtn").disabled = !S.last; }
+}
+async function sayText(text){
+  try{
+    if(!configured() || !window.SpeechSDK) throw 0;
+    const t = await token();
+    const cfg = SpeechSDK.SpeechConfig.fromAuthorizationToken(t.token, t.region);
+    cfg.speechSynthesisOutputFormat = SpeechSDK.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm;
+    const syn = new SpeechSDK.SpeechSynthesizer(cfg, null);
+    const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US"><voice name="${S.set.voiceA}"><prosody rate="${$("rate").value}">${escXml(text)}</prosody></voice></speak>`;
+    const ab = await new Promise((res, rej) => syn.speakSsmlAsync(ssml, r => { try{ syn.close(); }catch(e){} r.reason === SpeechSDK.ResultReason.SynthesizingAudioCompleted ? res(r.audioData) : rej(); }, () => rej()));
+    const w = wavToFloat(ab); await playPCM(w.pcm, w.sr);
+  }catch(e){ browserSay(text); }
+}
+
+/* ---------- dialogues ---------- */
+function setDialogue(d, note, save = true){
+  S.dlg = d; if(save) LS.set("dlg:" + S.today, d); renderDialogue();
+  S.last = null; $("coachBtn").disabled = true; $("coach").innerHTML = '<p class="note">전체 읽기나 한 줄 연습을 마치면 받을 수 있어요.</p>';
+  if(note != null) setState(note);
+}
+async function loadToday(){
+  const cached = LS.get("dlg:" + S.today, null);
+  if(cached && cached.lines){ setDialogue(cached); return; }
+  setDialogue(toDialogue(BANK[rotIdx()]), null, false);
+  if(!configured()) return;
+  setState("오늘의 대화를 불러오는 중… (처음이면 Claude가 새로 써서 10–30초)");
+  try{
+    const r = await api("speaking-today", {date: S.today});
+    if(r && r.dialogue && r.dialogue.lines) setDialogue(toDialogue(r.dialogue), "버튼을 누르면 1번 줄부터 차례로 녹음해요.");
+  }catch(e){ setState(errMsg(e) + " 기본 대화로 연습할 수 있어요."); }
+}
+function fillTopics(){
+  $("topicSel").innerHTML = (configured() ? `<optgroup label="Claude로 새 대화 만들기">${TOPICS.map((x, i) => `<option value="t${i}">${esc(x[1])}</option>`).join("")}<option value="free">직접 입력…</option></optgroup>` : "")
+    + `<optgroup label="기본 대화">${BANK.map((b, i) => `<option value="b${i}">${esc(b.title)}</option>`).join("")}</optgroup>`;
+  syncGen();
+}
+function syncGen(){ const v = $("topicSel").value; $("topicFree").hidden = v !== "free"; $("genBtn").textContent = v && v[0] === "b" ? "불러오기" : "만들기"; }
+async function generate(){
+  const v = $("topicSel").value;
+  if(v[0] === "b"){ setDialogue(toDialogue(BANK[+v.slice(1)]), "기본 대화를 불러왔어요."); $("genNote").textContent = ""; return; }
+  const topic = v === "free" ? $("topicFree").value.trim() : TOPICS[+v.slice(1)][0];
+  const topicKo = v === "free" ? topic : TOPICS[+v.slice(1)][1];
+  if(!topic){ $("genNote").textContent = "주제를 입력해 주세요."; return; }
+  $("genBtn").disabled = true; $("genNote").textContent = "Claude가 대화를 쓰는 중이에요… (10–30초)";
+  try{
+    const r = await api("speaking-today", {date: S.today, new: 1, topic, topicKo});
+    if(!r || !r.dialogue || !r.dialogue.lines) throw {message:"대화를 받지 못했어요."};
+    setDialogue(toDialogue(r.dialogue), "새 대화예요. 원어민 듣기로 먼저 들어 보고 녹음해 보세요.");
+    $("genNote").textContent = "새 대화를 불러왔어요. Notion에도 저장됐어요.";
+  }catch(e){ $("genNote").textContent = errMsg(e); }
+  finally{ $("genBtn").disabled = false; }
+}
+
+/* ---------- settings ---------- */
+function openSettings(){
+  $("sBase").value = S.set.base; $("sKey").value = S.set.key; $("sTarget").value = String(S.set.target);
+  $("sVoiceA").value = S.set.voiceA; $("sVoiceB").value = S.set.voiceB; $("sNote").textContent = "";
+  try{ $("settings").showModal(); }catch(e){ $("settings").setAttribute("open", ""); }
+}
+function readSettings(){ return {base: $("sBase").value.trim(), key: $("sKey").value.trim(), target: +$("sTarget").value, voiceA: $("sVoiceA").value, voiceB: $("sVoiceB").value}; }
+$("sTest").addEventListener("click", async () => {
+  const prev = S.set; S.set = Object.assign({}, prev, readSettings()); tok = null;
+  $("sNote").textContent = "확인 중…";
+  try{ const t = await token(); $("sNote").textContent = `연결됐어요. Azure 리전: ${t.region}`; }
+  catch(e){ $("sNote").textContent = errMsg(e); }
+  finally{ S.set = prev; tok = null; }
+});
+$("sClose").addEventListener("click", () => { try{ $("settings").close(); }catch(e){ $("settings").removeAttribute("open"); } });
+$("setForm").addEventListener("submit", ev => {
+  const was = S.set.base + "|" + S.set.key;
+  S.set = Object.assign({}, S.set, readSettings()); LS.set("settings", S.set); tok = null; S.native = {};
+  renderStats(); renderMetrics(); fillTopics();
+  if(was !== S.set.base + "|" + S.set.key && configured()){ LS.set("dlg:" + S.today, null); loadToday(); }
+});
+
+/* ---------- events ---------- */
+$("recBtn").addEventListener("click", runAll);
+$("stopRun").addEventListener("click", () => { stopFlag = true; if(current) current.finishInput(); });
+$("lineDone").addEventListener("click", () => { if(current) current.finishInput(); });
+$("lines").addEventListener("click", ev => {
+  const b = ev.target.closest("button"), li = ev.target.closest(".line"); if(!li) return;
+  const i = +li.dataset.i;
+  if(b && b.classList.contains("say")) sayLine(i);
+  else if(b && b.classList.contains("drill")) drill(i);
+  else { S.sel = i; S.selWord = null; renderDetail(); }
+});
+$("tabs").addEventListener("click", ev => { const b = ev.target.closest("button"); if(!b) return; S.sel = +b.dataset.i; S.selWord = null; renderDetail(); });
+$("dWords").addEventListener("click", ev => { const b = ev.target.closest(".wchip"); if(!b) return; S.selWord = +b.dataset.k; renderDetail(); });
+$("playNative").addEventListener("click", () => sayLine(S.sel));
+$("playMine").addEventListener("click", () => { const r = S.res[S.sel]; if(r && r.audio) playPCM(r.audio, 16000); });
+$("redoLine").addEventListener("click", () => drill(S.sel));
+$("playAll").addEventListener("click", playAll);
+$("changeBtn").addEventListener("click", () => { const p = $("changePanel"); p.hidden = !p.hidden; $("changeBtn").setAttribute("aria-expanded", String(!p.hidden)); });
+$("topicSel").addEventListener("change", syncGen);
+$("genBtn").addEventListener("click", generate);
+$("coachBtn").addEventListener("click", coach);
+$("openSettings").addEventListener("click", openSettings);
+const ro = new ResizeObserver(() => drawPitch()); ro.observe($("pitchFig"));
+try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawPitch); }catch(e){}
+
+/* ---------- boot ---------- */
+renderPlayAll(); setRecUI(false); renderStats(); fillTopics();
+loadToday();
+if(!configured()){ setState("처음이네요. 설정에서 n8n 주소와 접속 키를 넣어 주세요."); openSettings(); }
+}
+</script>
+</body>
+</html>
