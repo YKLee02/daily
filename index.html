@@ -65,7 +65,8 @@ select,input[type=text],input[type=url],input[type=password]{min-height:44px;fon
 .w.bad{color:var(--red);text-decoration:underline wavy;text-underline-offset:5px;text-decoration-thickness:1.5px}
 .w.omit{color:var(--red);opacity:.6;text-decoration:line-through}
 .lbtn{display:flex;gap:6px;align-items:center}
-.ib{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);cursor:pointer;flex:none}
+.ib{display:grid;place-items:center;width:44px;height:44px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--card);cursor:pointer;flex:none}
+.ib svg{display:block}
 .ib:hover{border-color:var(--blue);color:var(--blue)}
 .lsc{font-size:13px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .lsc:empty{display:none}.lsc.hi{background:var(--blue-soft);color:var(--blue)}.lsc.mid{background:var(--amber-soft);color:var(--amber)}.lsc.lo{background:var(--red-soft);color:var(--red)}
@@ -138,8 +139,8 @@ select,input[type=text],input[type=url],input[type=password]{min-height:44px;fon
 .coachout .sum{font-size:17px}
 .coachout .fx{border-left:3px solid var(--blue);padding:4px 0 4px 14px}
 .coachout .fx b{font:700 19px var(--serif)}
-.drill{display:flex;align-items:center;gap:8px;margin-top:6px;font:italic 400 18px var(--serif)}
-.drill .ib{width:36px;height:36px}
+.drillrow{display:flex;align-items:center;gap:8px;margin-top:6px;font:italic 400 18px var(--serif)}
+.drillrow .ib{width:36px;height:36px}
 .coachout .next{background:var(--blue-soft);border-radius:12px;padding:12px 14px;font-weight:600}
 .coachout ol{margin:0;padding-left:1.2em;display:grid;gap:6px}
 .hist{border-top:1px solid var(--line)}
@@ -564,6 +565,14 @@ async function openMic(){
   src.connect(proc); proc.connect(ctx.destination);
   if(ctx.state === "suspended") await ctx.resume();
   return mic;
+}
+function closeMic(){
+  if(!mic) return;
+  const m = mic; mic = null;
+  try{ m.proc.onaudioprocess = null; m.src.disconnect(); m.proc.disconnect(); }catch(e){}
+  try{ m.stream.getTracks().forEach(t => t.stop()); }catch(e){}
+  try{ m.ctx.close(); }catch(e){}
+  $("level").style.width = "0";
 }
 function toInt16(f){ const o = new Int16Array(f.length); for(let i = 0; i < f.length; i++){ const v = clamp(f[i], -1, 1); o[i] = v < 0 ? v * 0x8000 : v * 0x7fff; } return o; }
 function concat(chunks){ let n = 0; chunks.forEach(c => n += c.length); const o = new Float32Array(n); let p = 0; chunks.forEach(c => { o.set(c, p); p += c.length; }); return o; }
@@ -997,7 +1006,7 @@ async function runAll(){
     await Promise.all(pending);
     if(!stopFlag) finishRun(); else setState("중단했어요. 녹음한 줄은 분석을 볼 수 있어요.");
   }catch(e){ setState(errMsg(e)); }
-  finally{ S.busy = false; current = null; markCur(null); setRecUI(false); $("level").style.width = "0"; }
+  finally{ S.busy = false; current = null; markCur(null); setRecUI(false); closeMic(); }
 }
 async function drill(i){
   if(S.busy) return;
@@ -1014,7 +1023,7 @@ async function drill(i){
       logAttempt("한 줄", i, r.sc, weakOf([i]), r.text);
     }
   }catch(e){ setState(errMsg(e)); }
-  finally{ S.busy = false; current = null; markCur(null); setRecUI(false); $("level").style.width = "0"; }
+  finally{ S.busy = false; current = null; markCur(null); setRecUI(false); closeMic(); }
 }
 function handleResult(out, i, mode){
   const r = parseResult(out, i);
@@ -1097,7 +1106,7 @@ async function coach(){
     const j = JSON.parse(text.slice(a, b + 1));
     const fx = Array.isArray(j.fixes) ? j.fixes.slice(0, 3) : [], rh = Array.isArray(j.rhythm) ? j.rhythm.slice(0, 3) : [];
     $("coach").innerHTML = (j.summary ? `<p class="sum">${esc(j.summary)}</p>` : "")
-      + fx.map((f, k) => `<div class="fx"><b>${esc(f.word)}</b> <span class="note">${esc(f.ipa || "")}</span><p>${esc(f.issue)}</p><p class="note">${esc(f.how)}</p>${f.drill ? `<p class="drill"><button class="ib sayx" data-k="${k}" aria-label="연습 문장 듣기">${ICON.play}</button><span>${esc(f.drill)}</span></p>` : ""}</div>`).join("")
+      + fx.map((f, k) => `<div class="fx"><b>${esc(f.word)}</b> <span class="note">${esc(f.ipa || "")}</span><p>${esc(f.issue)}</p><p class="note">${esc(f.how)}</p>${f.drill ? `<p class="drillrow"><button class="ib sayx" data-k="${k}" aria-label="연습 문장 듣기">${ICON.play}</button><span>${esc(f.drill)}</span></p>` : ""}</div>`).join("")
       + (rh.length ? `<div><h3>억양·리듬</h3><ol>${rh.map(x => `<li>${x.line ? `<b>${esc(x.line)}번 줄</b> · ` : ""}${esc(x.tip)}</li>`).join("")}</ol></div>` : "")
       + (j.next ? `<p class="next">다음 시도: ${esc(j.next)}</p>` : "");
     $("coach").querySelectorAll(".sayx").forEach(btn => btn.addEventListener("click", () => sayText(String(fx[+btn.dataset.k].drill))));
