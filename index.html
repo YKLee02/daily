@@ -172,6 +172,8 @@ dialog::backdrop{background:rgba(10,12,30,.55)}
  .stamp{position:static;display:inline-block;margin-top:10px;transform:none}
  .pstats{grid-template-columns:minmax(0,1fr)}.dlg .row{grid-template-columns:1fr}
 }
+.picker{display:grid;gap:12px;padding:18px;margin-bottom:24px;border:1px solid var(--line);border-radius:16px;background:var(--blue-soft)}
+.picker label{display:grid;gap:6px;font-size:14px;font-weight:600}.picker .acts{margin-top:0}
 </style>
 </head>
 <body>
@@ -194,7 +196,12 @@ dialog::backdrop{background:rgba(10,12,30,.55)}
 <main class="band main">
   <div class="in">
     <section class="script" aria-labelledby="dlgTitle">
-      <p class="topic" id="dlgTopic"></p>
+      <div class="picker" aria-label="연습 스크립트 선택">
+<label>1. 주제<select id="categorySel"></select></label>
+<label>2. 상황별 스크립트<select id="scriptSel"></select></label>
+<div class="acts"><button class="btn solid" id="selectScript">이 스크립트로 연습</button><button class="btn" id="recommendScript">오늘의 추천</button></div>
+<p class="note" id="selectionNote" aria-live="polite">핵심 표현을 익히고, 듣고 따라 읽으며 약 5분간 연습해요.</p>
+</div><p class="topic" id="dlgTopic"></p>
       <h2 id="dlgTitle">Loading…</h2>
       <p class="scene" id="dlgScene"></p>
       <div class="acts">
@@ -444,6 +451,11 @@ const BANK = [
   "B|f|Got it. / I'll *prioritize* it / and get back to you *tomorrow*."],
   phrases:[["just following up on","~ 관련해서 다시 연락드려요"],["slipped through the cracks","깜빡 놓쳤다"],["No worries","괜찮아요"]]}
 ];
+
+BANK.forEach((b,i)=>{b.category=i===7?"smalltalk":"tpo";b.label=b.topic;});
+BANK.push(...[{"category":"smalltalk","label":"커피 한 잔","title":"A coffee break","topic":"커피 한 잔","scene":"동료와 커피를 마시며 이야기해요.","lines":["A|r|Do you have time for a *coffee break*?","B|f|Sure. / I could use a *short break*.","A|r|What do you *usually order*?","B|r|A *decaf Americano*. / How about you?","A|f|I usually get a *latte*.","B|f|Sounds good. / Let's *head downstairs*."],"phrases":[["I could use a break","잠깐 쉬면 좋겠어요"],["What do you usually order?","보통 무엇을 주문해요?"],["head downstairs","아래층으로 가다"]]},{"category":"smalltalk","label":"주말 계획","title":"Weekend plans","topic":"주말 계획","scene":"동료에게 주말 계획을 물어봐요.","lines":["A|r|Any *plans* for the weekend?","B|f|I'm thinking of going for a *hike*.","A|r|That sounds *nice*. / Where are you going?","B|f|Somewhere *nearby*. / I haven't decided yet.","A|f|Let me know if you find a *good trail*.","B|r|Will do. / What about *you*?"],"phrases":[["Any plans?","계획 있어요?"],["somewhere nearby","가까운 어딘가"],["I haven't decided yet","아직 결정하지 않았어요"]]},{"category":"smalltalk","label":"음식·식당","title":"A lunch recommendation","topic":"음식·식당","scene":"처음 만난 동료와 식당 이야기를 나눠요.","lines":["A|r|Do you know a good *lunch spot* around here?","B|f|There's a *Korean place* just down the street.","A|r|Nice. / What would you *recommend*?","B|f|The *bibimbap* is great. / You can get the sauce on the side.","A|f|Perfect. / I don't like food that's *too spicy*.","B|f|Then that should *work for you*."],"phrases":[["lunch spot","점심 먹기 좋은 곳"],["What would you recommend?","무엇을 추천해요?"],["on the side","따로 담아서"]]},{"category":"smalltalk","label":"사무실에서 집중하기","title":"A busy office","topic":"사무실에서 집중하기","scene":"사무실 분위기에 대해 가볍게 이야기해요.","lines":["A|f|It's pretty *busy* in here today.","B|f|Yeah. / I get *distracted easily* in the office.","A|f|I know what you mean. / There's always *something going on*.","B|f|Exactly. / I might find a *quiet room* for a bit.","A|f|Good idea. / I've got a meeting in *ten minutes*.","B|f|Hope it goes *well*. / I'll catch up with you later."],"phrases":[["I get distracted easily","쉽게 집중이 흐트러져요"],["There's always something going on","늘 무언가가 벌어지고 있어요"],["for a bit","잠시"]]},{"category":"smalltalk","label":"처음 만난 사람과 인사","title":"Meeting someone new","topic":"처음 만난 사람과 인사","scene":"모임에서 처음 만난 사람과 대화를 시작해요.","lines":["A|f|Hi, / I don't think we've *met*. / I'm YK.","B|f|Nice to meet you. / I'm *Alex*.","A|r|How do you know the *host*?","B|r|We used to *work together*. / How about you?","A|f|We know each other from *church*.","B|r|Oh, nice. / Have you known each other *long*?"],"phrases":[["I don't think we've met","저희 처음 뵙는 것 같네요"],["How do you know the host?","주최자와 어떻게 아는 사이세요?"],["used to work together","예전에 함께 일했어요"]]},{"category":"school","label":"등교 인사","title":"Good morning, everyone","topic":"등교 인사","scene":"A는 원장님, B는 아이예요. 토요일 아침 반갑게 맞이해요.","lines":["A|f|Good *morning*! / I'm glad you're *here*.","B|f|Good morning! / I brought my *book*.","A|r|Great! / How are you *feeling* today?","B|f|A little *sleepy*.","A|f|Me too sometimes! / Let's put your bag in your *cubby*.","B|f|Okay. / Then I'll find my *teacher*."],"phrases":[["I'm glad you're here","와 줘서 반가워"],["How are you feeling?","기분이 어때?"],["Let's put your bag away","가방을 정리하자"]]},{"category":"school","label":"새 친구 환영","title":"Welcoming a new student","topic":"새 친구 환영","scene":"A는 원장님, B는 처음 온 아이예요.","lines":["A|r|Hi! / I'm the *principal*. / What's your *name*?","B|f|My name is *Emma*.","A|r|Welcome, Emma. / Is this your *first day*?","B|f|Yes. / I don't *know anyone*.","A|r|That's okay. / Would you like me to help you *meet a friend*?","B|f|Yes, *please*."],"phrases":[["Is this your first day?","오늘이 첫날이니?"],["That's okay","괜찮아"],["Would you like me to help?","내가 도와줄까?"]]},{"category":"school","label":"칭찬과 격려","title":"You kept trying","topic":"칭찬과 격려","scene":"A는 원장님, B는 한글 쓰기를 연습한 아이예요.","lines":["A|f|I saw you *practicing* your Korean letters.","B|f|It was *hard*. / I made a lot of *mistakes*.","A|f|You kept *trying*. / That's something to be *proud of*.","B|f|But mine doesn't look like the *example*.","A|r|It takes *practice*. / Which letter would you like to try *again*?","B|r|This one. / Can you *help me*?"],"phrases":[["You kept trying","계속 노력했구나"],["be proud of","자랑스러워하다"],["It takes practice","연습이 필요한 거야"]]},{"category":"school","label":"속상한 아이 달래기","title":"When a child feels upset","topic":"속상한 아이 달래기","scene":"A는 원장님, B는 보호자가 보고 싶은 아이예요.","lines":["A|r|You look *upset*. / Would you like to *talk*?","B|f|I miss my *mom*.","A|f|I hear you. / It's *okay* to miss her.","B|r|Can I stay here for a *minute*?","A|f|Of course. / We can take a *quiet moment* together.","B|r|Okay. / Can my *teacher* sit with us too?"],"phrases":[["Would you like to talk?","이야기하고 싶니?"],["I hear you","네 마음 이해해"],["take a quiet moment","잠깐 조용히 쉬다"]]},{"category":"school","label":"다툼 중재","title":"Taking turns","topic":"다툼 중재","scene":"A는 원장님, B는 친구와 마커를 두고 다툰 아이예요.","lines":["A|f|Let's *pause*. / Tell me what *happened*.","B|f|He took the marker I was *using*.","A|f|You wanted to *finish* your picture first.","B|f|Yes. / I wasn't *done*.","A|f|Let's hear his side too. / Then we can make a plan to *take turns*.","B|r|Okay. / Can I tell him I need *one more minute*?"],"phrases":[["Tell me what happened","무슨 일이 있었는지 말해 줄래?"],["I wasn't done","아직 다 안 끝났어요"],["take turns","차례를 지키며 번갈아 하다"]]},{"category":"school","label":"수업 참여 유도","title":"Joining the activity","topic":"수업 참여 유도","scene":"A는 원장님, B는 말하기를 망설이는 아이예요.","lines":["A|r|Would you like to *join us*?","B|f|I don't know how to say it in *Korean*.","A|f|That's okay. / We can say it *together*.","B|r|What if I get it *wrong*?","A|r|It's okay to make *mistakes*. / Would you like to try one *word*?","B|f|Okay. / I'll *try*."],"phrases":[["Would you like to join us?","우리와 함께할래?"],["We can say it together","함께 말하면 돼"],["It's okay to make mistakes","틀려도 괜찮아"]]}]);
+const CATEGORIES=[["tpo","TPO 회사 업무"],["smalltalk","스몰토크"],["school","한글학교 · 아이들과 대화"]];
+
 const TOPICS = [
  ["Giving a stand-up status update","스탠드업 진행 상황 공유"],
  ["Clarifying the scope of a data request","데이터 요청 범위 확인"],
@@ -1078,9 +1090,9 @@ function coachPrompt(){
 ${weak || "   - no weak words"}
    Pitch vs native TTS: contour similarity ${c.sim == null ? "n/a" : c.sim + "/100"}, his pitch range ${c.rangeN ? Math.round(100 * c.rangeU / c.rangeN) + "% of native" : "n/a"}, ending native ${c.endN || "?"} vs his ${c.endU || "?"} (f=fall, r=rise, l=flat)`;
   }).join("\n\n");
-  return `You are a precise, warm American-English pronunciation and intonation coach. The learner is a Korean-speaking professional (data engineer and business analyst in airline in-flight connectivity). Write explanations in natural, concise Korean (존댓말). Keep English for words, IPA symbols, examples and drills.
+  return `You are a precise, warm American-English pronunciation and intonation coach. The learner is a Korean-speaking Technical Product Owner who also leads a Korean school. Dialogue topic: ${S.dlg.topic}. Scene: ${S.dlg.scene}. Write explanations in natural, concise Korean (존댓말). Keep English for words, IPA symbols, examples and drills.
 
-Below are Azure pronunciation-assessment results (0-100, phoneme level, IPA) for workplace dialogue lines he read aloud, plus pitch measurements comparing his intonation with a native TTS reading of the same line (time-aligned by words).
+Below are Azure pronunciation-assessment results (0-100, phoneme level, IPA) for the dialogue lines he read aloud, plus pitch measurements comparing his intonation with a native TTS reading of the same line (time-aligned by words).
 
 ${parts}
 
@@ -1141,29 +1153,56 @@ async function loadToday(){
   setState("오늘의 대화를 불러오는 중… (처음이면 Claude가 새로 써서 10–30초)");
   try{
     const r = await api("speaking-today", {date: S.today});
-    if(r && r.dialogue && r.dialogue.lines) setDialogue(toDialogue(r.dialogue), "버튼을 누르면 1번 줄부터 차례로 녹음해요.");
+    if(!S.busy && !LS.get("manual:"+S.today,false) && r && r.dialogue && r.dialogue.lines) setDialogue(toDialogue(r.dialogue), "버튼을 누르면 1번 줄부터 차례로 녹음해요.");
   }catch(e){ setState(errMsg(e) + " 기본 대화로 연습할 수 있어요."); }
 }
 function fillTopics(){
+  const cat=$("categorySel").value || LS.get("category","tpo");
+  $("categorySel").innerHTML=CATEGORIES.map(([id,label])=>`<option value="${id}">${esc(label)}</option>`).join("");
+  $("categorySel").value=CATEGORIES.some(c=>c[0]===cat)?cat:"tpo";
+  fillScripts();
+
   $("topicSel").innerHTML = (configured() ? `<optgroup label="Claude로 새 대화 만들기">${TOPICS.map((x, i) => `<option value="t${i}">${esc(x[1])}</option>`).join("")}<option value="free">직접 입력…</option></optgroup>` : "")
     + `<optgroup label="기본 대화">${BANK.map((b, i) => `<option value="b${i}">${esc(b.title)}</option>`).join("")}</optgroup>`;
   syncGen();
 }
+function fillScripts(){
+  const cat=$("categorySel").value;
+  const saved=LS.get("script:"+cat,null);
+  $("scriptSel").innerHTML=BANK.map((b,i)=>b.category===cat?`<option value="${i}">${esc(b.label)} · ${esc(b.title)}</option>`:"").join("");
+  if(saved!=null && BANK[saved]?.category===cat) $("scriptSel").value=String(saved);
+}
+function selectScript(recommend=false){
+  if(S.busy || generating){$("selectionNote").textContent="진행 중인 녹음이나 생성을 마친 뒤 선택해 주세요.";return;}
+  const cat=$("categorySel").value, candidates=BANK.map((b,i)=>b.category===cat?i:-1).filter(i=>i>=0);
+  if(recommend){const day=Math.floor(new Date(S.today+"T12:00:00").getTime()/864e5);$("scriptSel").value=String(candidates[day%candidates.length]);}
+  const i=Number($("scriptSel").value);
+  stopPlay(); S.native={}; S.lastLogId=null;
+  LS.set("category",cat);LS.set("script:"+cat,i);LS.set("manual:"+S.today,true);
+  setDialogue(toDialogue(BANK[i]),"원어민 듣기로 먼저 듣고, 전체 읽기 또는 한 줄 연습을 시작해 보세요.");
+  $("selectionNote").textContent=(recommend?"오늘의 추천: ":"선택한 스크립트: ")+BANK[i].label;
+}
+let generating=false;
+$("categorySel").addEventListener("change",()=>{LS.set("category",$("categorySel").value);fillScripts();});
+$("selectScript").addEventListener("click",()=>selectScript());
+$("recommendScript").addEventListener("click",()=>selectScript(true));
 function syncGen(){ const v = $("topicSel").value; $("topicFree").hidden = v !== "free"; $("genBtn").textContent = v && v[0] === "b" ? "불러오기" : "만들기"; }
 async function generate(){
+  if(S.busy || generating) return;
+  stopPlay();
   const v = $("topicSel").value;
   if(v[0] === "b"){ setDialogue(toDialogue(BANK[+v.slice(1)]), "기본 대화를 불러왔어요."); $("genNote").textContent = ""; return; }
   const topic = v === "free" ? $("topicFree").value.trim() : TOPICS[+v.slice(1)][0];
   const topicKo = v === "free" ? topic : TOPICS[+v.slice(1)][1];
   if(!topic){ $("genNote").textContent = "주제를 입력해 주세요."; return; }
-  $("genBtn").disabled = true; $("genNote").textContent = "Claude가 대화를 쓰는 중이에요… (10–30초)";
+  generating=true; $("genBtn").disabled = true; $("genNote").textContent = "Claude가 대화를 쓰는 중이에요… (10–30초)";
   try{
     const r = await api("speaking-today", {date: S.today, new: 1, topic, topicKo});
     if(!r || !r.dialogue || !r.dialogue.lines) throw {message:"대화를 받지 못했어요."};
     setDialogue(toDialogue(r.dialogue), "새 대화예요. 원어민 듣기로 먼저 들어 보고 녹음해 보세요.");
     $("genNote").textContent = "새 대화를 불러왔어요. Notion에도 저장됐어요.";
   }catch(e){ $("genNote").textContent = errMsg(e); }
-  finally{ $("genBtn").disabled = false; }
+  finally{ generating=false; $("genBtn").disabled = false; }
 }
 
 /* ---------- settings ---------- */
