@@ -174,6 +174,8 @@ dialog::backdrop{background:rgba(10,12,30,.55)}
 }
 .picker{display:grid;gap:12px;padding:18px;margin-bottom:24px;border:1px solid var(--line);border-radius:16px;background:var(--blue-soft)}
 .picker label{display:grid;gap:6px;font-size:14px;font-weight:600}.picker .acts{margin-top:0}
+
+body.memorizing #lines, body.memorizing .phr, body.memorizing .detail { visibility:hidden; }
 </style>
 </head>
 <body>
@@ -207,6 +209,7 @@ dialog::backdrop{background:rgba(10,12,30,.55)}
       <div class="acts">
         <button class="btn" id="playAll"></button>
         <label class="rate">원어민 속도 <select id="rate"><option value="-25%">느리게</option><option value="-10%">조금 느리게</option><option value="0%" selected>보통</option></select></label>
+        <button class="btn" id="memoryBtn" aria-pressed="false">스크립트 숨기기</button>
         <button class="btn" id="changeBtn" aria-expanded="false" aria-controls="changePanel">다른 대화</button>
       </div>
       <div class="change" id="changePanel" hidden>
@@ -225,17 +228,18 @@ dialog::backdrop{background:rgba(10,12,30,.55)}
       <div class="recrow">
         <button class="recbtn" id="recBtn" aria-label="전체 읽기 시작"></button>
         <div>
-          <p class="mode" id="modeLine">전체 읽기</p>
-          <p class="rstate" id="recState">버튼을 누르면 1번 줄부터 차례로 녹음해요.</p>
+          <p class="mode" id="modeLine">전체 연속 읽기 · v2026.11.26</p>
+          <p class="rstate" id="recState">한 번 누르고 전체 스크립트를 읽은 뒤 완료를 눌러 주세요. (최대 5분)</p>
         </div>
       </div>
       <div class="level" aria-hidden="true"><i id="level"></i></div>
       <div class="recacts" id="recActs" hidden>
-        <button class="btn" id="lineDone">이 줄 끝</button>
-        <button class="btn" id="stopRun">그만하기</button>
+        <button class="btn" id="lineDone">완료 · 평가하기</button>
+        <button class="btn" id="stopRun">취소</button>
       </div>
     </section>
 
+    <p class="note" id="memoryResult" role="status"></p>
     <section class="score" aria-label="점수">
       <div class="ringwrap">
         <svg viewBox="0 0 200 200" aria-hidden="true">
@@ -960,7 +964,7 @@ function setRing(v){
 function renderMetrics(){
   const a = runAvg();
   setRing(a ? a.pron : null);
-  $("scoreWhat").textContent = a ? `녹음한 ${a.n}/${S.dlg.lines.length}줄의 평균 발음 점수` : "전체 읽기 평균 발음 점수";
+  $("scoreWhat").textContent = Object.values(S.res).some(r=>r.continuous) ? "연속 읽기: 줄별 단어 정확도 평균 (완성도 90점 이상 + 목표 점수면 통과)" : a ? `녹음한 ${a.n}/${S.dlg.lines.length}줄의 평균 발음 점수` : "전체 읽기 평균 발음 점수";
   [["Acc","acc"],["Flu","flu"],["Comp","comp"],["Pros","pros"],["Sim","sim"]].forEach(([id, k]) => { const v = a ? a[k] : null; $("m" + id).textContent = v == null ? "–" : v; $("b" + id).style.width = (v || 0) + "%"; });
 }
 function renderStats(){
@@ -984,8 +988,9 @@ const MIC_ERR = {NotAllowedError:"마이크 권한이 막혀 있어요. 주소�
 function setState(t){ $("recState").textContent = t; }
 function setRecUI(on){
   const b = $("recBtn"); b.classList.toggle("live", on); b.innerHTML = on ? ICON.stop : ICON.mic;
-  b.setAttribute("aria-label", on ? "그만하기" : "전체 읽기 시작");
+  b.setAttribute("aria-label", on ? "완료하고 평가하기" : "전체 읽기 시작");
   $("recActs").hidden = !on;
+  ["categorySel","scriptSel","genBtn","playAll","changeBtn"].forEach(id=>{if($(id))$(id).disabled=on;});
   document.querySelectorAll(".drill").forEach(x => x.disabled = on);
 }
 function markCur(i){ document.querySelectorAll(".line.cur").forEach(e => e.classList.remove("cur")); if(i != null && $("line" + i)) $("line" + i).classList.add("cur"); }
@@ -997,32 +1002,112 @@ async function prepare(){
   await token();
 }
 let stopFlag = false;
+// One continuous Azure session. Silence creates result segments, never stops input.
+function recordWhole(){
+  const push = SpeechSDK.AudioInputStream.createPushStream(SpeechSDK.AudioStreamFormat.getWaveFormatPCM(16000,16,1));
+  const cfg = speechCfg(tok);
+  cfg.setProperty(SpeechSDK.PropertyId.Speech_SegmentationSilenceTimeoutMs, "1200");
+  const reco = new SpeechSDK.SpeechRecognizer(cfg, SpeechSDK.AudioConfig.fromStreamInput(push));
+  const pa = new SpeechSDK.PronunciationAssessmentConfig(S.dlg.lines.map(l=>plain(l.t)).join(" "), SpeechSDK.PronunciationAssessmentGradingSystem.HundredMark, SpeechSDK.PronunciationAssessmentGranularity.Phoneme, false);
+  pa.phonemeAlphabet="IPA"; pa.nbestPhonemeCount=5;
+  if(typeof pa.enableProsodyAssessment === "function") pa.enableProsodyAssessment();
+  else pa.enableProsodyAssessment=true;
+  pa.applyTo(reco);
+  const chunks=[], segments=[]; let closed=false, settled=false, guard, drain;
+  let resolve, reject;
+  const result=new Promise((a,b)=>{resolve=a;reject=b;});
+  const sink=f=>{if(!closed){chunks.push(f);push.write(toInt16(f).buffer);}};
+  const finishInput=()=>{
+    if(closed)return; closed=true;
+    if(mic && mic.sink===sink)mic.sink=null;
+    push.close(); clearTimeout(guard);
+    setState("녹음 완료. 마지막 발화를 분석하고 있어요…");
+    drain=setTimeout(()=>settle(new Error("분석 응답 시간이 초과됐어요. 다시 시도해 주세요.")),45000);
+  };
+  function settle(error){
+    if(settled)return; settled=true; closed=true;
+    clearTimeout(guard);clearTimeout(drain);
+    if(mic && mic.sink===sink)mic.sink=null;
+    try{push.close();reco.close();}catch(e){}
+    if(error)reject(error);else resolve({segments,audio:concat(chunks)});
+  }
+  current={finishInput,cancel:()=>settle(new Error("녹음을 취소했어요."))};
+  reco.recognized=(_,e)=>{
+    if(settled || e.result.reason!==SpeechSDK.ResultReason.RecognizedSpeech)return;
+    try{segments.push(parseResult({r:e.result,audio:null},0));}
+    catch(e){settle(e);}
+  };
+  reco.canceled=(_,e)=>{
+    if(e.reason===SpeechSDK.CancellationReason.Error)settle(new Error("Azure 인식 오류: "+(e.errorDetails||e.reason)));
+    else if(closed)settle();
+    else settle(new Error("인식 연결이 종료됐어요. 다시 녹음해 주세요."));
+  };
+  reco.sessionStopped=()=>closed?settle():settle(new Error("인식 연결이 일찍 종료됐어요. 다시 시도해 주세요."));
+  reco.startContinuousRecognitionAsync(()=>{
+    if(settled)return;
+    mic.sink=sink;
+    setState("녹음 중 · 잠깐 쉬어도 계속 녹음해요. 다 말한 뒤 ‘완료 · 평가하기’를 누르세요.");
+    guard=setTimeout(finishInput,5*60*1000);
+  },e=>settle(new Error("Azure 인식 시작 오류: "+e)));
+  return result;
+}
+function distributeWhole({segments,audio}){
+  const heard=segments.flatMap((r,seg)=>r.words.map(w=>({...w,seg}))).filter(w=>w.err!=="Omission");
+  if(!heard.length)throw new Error("말소리를 인식하지 못했어요. 마이크를 확인하고 다시 시도해 주세요.");
+  const refs=S.dlg.lines.flatMap((l,i)=>S.words[i].filter(w=>simple(w.w)).map(w=>({w:w.w,i})));
+  const pairs=matchPairs(refs.map(w=>simple(w.w)),heard.map(w=>simple(w.w)));
+  const mapped=new Map(pairs.map(([a,b,equal])=>[a,{b,equal}]));
+  const used=new Set(pairs.map(p=>p[1]));
+  const bins=S.dlg.lines.map(()=>[]);
+  refs.forEach((ref,k)=>{
+    const hit=mapped.get(k), w=hit && heard[hit.b];
+    bins[ref.i].push(w?{...w,reference:ref.w,match:hit.equal}:{w:ref.w,acc:0,err:"Omission",flags:[],phon:[],off:0,dur:0,match:false});
+  });
+  heard.forEach((w,b)=>{
+    if(used.has(b))return;
+    const next=pairs.find(p=>p[1]>b), prev=pairs.filter(p=>p[1]<b).pop();
+    const i=refs[(next||prev||[0])[0]].i;
+    bins[i].push({...w,err:"Insertion",match:false});
+  });
+  bins.forEach((ws,i)=>{
+    const actual=ws.filter(w=>w.err!=="Omission");
+    const t0=actual.length?Math.max(0,Math.min(...actual.map(w=>w.off))-.1):0;
+    const t1=actual.length?Math.max(...actual.map(w=>w.off+w.dur))+.15:0;
+    const count=refs.filter(w=>w.i===i).length;
+    const comp=Math.round(100*ws.filter(w=>w.match).length/Math.max(1,count));
+    const acc=actual.length?Math.round(actual.reduce((a,w)=>a+(w.acc||0),0)/actual.length):0;
+    // Line score is a local word-accuracy aggregate, not Azure's utterance PronScore.
+    S.res[i]={i,text:actual.sort((a,b)=>a.off-b.off).map(w=>w.w).join(" "),
+      sc:{pron:acc,acc,comp,flu:null,pros:null}, continuous:true,
+      words:ws.map(w=>({...w,off:Math.max(0,w.off-t0)})),audio:audio.slice(Math.floor(t0*16000),Math.ceil(t1*16000)),at:Date.now()};
+  });
+  const correct=pairs.filter(p=>p[2]).length;
+  const errors=refs.length-correct+heard.length-used.size;
+  $("memoryResult").textContent=`스크립트 일치도 ${Math.round(100*Math.max(0,1-errors/Math.max(1,refs.length)))}% · 누락/다른 단어 ${refs.length-correct}개 · 추가 ${heard.length-used.size}개. 음성 인식 결과 기반이며 실제 암기 실수와 다를 수 있어요. 연속 읽기 점수는 단어 정확도 평균입니다. 유창성·운율 상세 평가는 줄별 연습을 이용하세요.`;
+}
 async function runAll(){
-  if(S.busy){ stopFlag = true; if(current) current.finishInput(); return; }
-  S.busy = true; stopFlag = false; stopPlay(); setRecUI(true); $("modeLine").textContent = "전체 읽기";
-  const pending = [];
+  if(S.busy){if(current)current.finishInput();return;}
+  S.busy=true;stopFlag=false;stopPlay();setRecUI(true);
+  $("modeLine").textContent="전체 연속 읽기 · v2026.11.26";
+  $("lineDone").textContent="완료 · 평가하기";
   try{
     await prepare();
-    S.res = {}; S.cmp = {}; S.dlg.lines.forEach((_, i) => renderLine(i)); renderMetrics(); renderDetail();
-    for(let i = 0; i < S.dlg.lines.length && !stopFlag; i++){
-      await token();
-      markCur(i); S.sel = i; renderTabs();
-      setState(`${i + 1}번 줄(${S.dlg.lines[i].s})을 읽어 주세요. 다 읽고 잠깐 쉬면 다음 줄로 넘어가요.`);
-      const {inputDone, result} = recordLine(i);
-      pending.push(result.then(out => handleResult(out, i, "all")).catch(e => setState(errMsg(e))));
-      await inputDone;
-      await sleep(150);
-    }
-    markCur(null);
-    setState("채점을 마무리하는 중…");
-    await Promise.all(pending);
-    if(!stopFlag) finishRun(); else setState("중단했어요. 녹음한 줄은 분석을 볼 수 있어요.");
-  }catch(e){ setState(errMsg(e)); }
-  finally{ S.busy = false; current = null; markCur(null); setRecUI(false); closeMic(); }
+    if(stopFlag)return;
+    S.res={};S.cmp={};$("memoryResult").textContent="";
+    S.dlg.lines.forEach((_,i)=>renderLine(i));renderMetrics();renderDetail();
+    const out=await recordWhole();
+    if(stopFlag)return;
+    distributeWhole(out);S.last={mode:"all"};
+    S.dlg.lines.forEach((_,i)=>renderLine(i));renderMetrics();renderDetail();
+    $("coachBtn").disabled=false;
+    finishRun();
+    if(S.res[S.sel].audio.length)ensureCompare(S.sel);
+  }catch(e){setState(errMsg(e));}
+  finally{S.busy=false;current=null;setRecUI(false);closeMic();}
 }
 async function drill(i){
   if(S.busy) return;
-  S.busy = true; stopPlay(); setRecUI(true); $("modeLine").textContent = `${i + 1}번 줄 연습`;
+  S.busy = true; stopPlay(); setRecUI(true); $("lineDone").textContent="이 줄 완료"; $("modeLine").textContent = `${i + 1}번 줄 연습`;
   try{
     await prepare();
     markCur(i); setState(`${i + 1}번 줄을 읽어 주세요.`);
@@ -1055,7 +1140,7 @@ function weakOf(idx){
 function finishRun(){
   const a = runAvg();
   if(!a){ setState("인식된 줄이 없어요. 마이크를 확인하고 다시 해 보세요."); return; }
-  const pass = a.n === S.dlg.lines.length && a.pron >= S.set.target;
+  const pass = a.n === S.dlg.lines.length && a.pron >= S.set.target && (a.comp == null || a.comp >= 90);
   const day = S.days[S.today] || {best: 0, passed: false};
   day.best = Math.max(day.best || 0, a.pron); day.passed = day.passed || pass; S.days[S.today] = day; LS.set("days", S.days);
   S.tries.push({at: Date.now(), m: "all", t: a.pron}); LS.set("tries:" + S.today, S.tries);
@@ -1153,7 +1238,7 @@ async function loadToday(){
   setState("오늘의 대화를 불러오는 중… (처음이면 Claude가 새로 써서 10–30초)");
   try{
     const r = await api("speaking-today", {date: S.today});
-    if(!S.busy && !LS.get("manual:"+S.today,false) && r && r.dialogue && r.dialogue.lines) setDialogue(toDialogue(r.dialogue), "버튼을 누르면 1번 줄부터 차례로 녹음해요.");
+    if(!S.busy && !LS.get("manual:"+S.today,false) && r && r.dialogue && r.dialogue.lines) setDialogue(toDialogue(r.dialogue), "한 번 누르고 전체 스크립트를 읽은 뒤 완료를 눌러 주세요. (최대 5분)");
   }catch(e){ setState(errMsg(e) + " 기본 대화로 연습할 수 있어요."); }
 }
 function fillTopics(){
@@ -1229,7 +1314,8 @@ $("setForm").addEventListener("submit", ev => {
 
 /* ---------- events ---------- */
 $("recBtn").addEventListener("click", runAll);
-$("stopRun").addEventListener("click", () => { stopFlag = true; if(current) current.finishInput(); });
+$("stopRun").addEventListener("click", () => { stopFlag = true; if(current){ if(current.cancel)current.cancel();else current.finishInput(); } });
+$("memoryBtn").addEventListener("click",()=>{const hidden=document.body.classList.toggle("memorizing");$("memoryBtn").textContent=hidden?"스크립트 보기":"스크립트 숨기기";$("memoryBtn").setAttribute("aria-pressed",String(hidden));});
 $("lineDone").addEventListener("click", () => { if(current) current.finishInput(); });
 $("lines").addEventListener("click", ev => {
   const b = ev.target.closest("button"), li = ev.target.closest(".line"); if(!li) return;
